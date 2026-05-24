@@ -1,0 +1,387 @@
+{
+  "sourceFile": "menu.pdf",
+  "extractedAt": "2026-05-24T22:26:20.463Z",
+  "sections": [
+    {
+      "section": "SPIRIT FREE",
+      "items": [
+        {
+          "name": "FREE SPIRITED",
+          "price": "16.50",
+          "description": "Lyre's Italian spritz (0% abv) & Regatta tonic served long & charged with club soda"
+        },
+        {
+          "name": "THE PESSIMIST",
+          "price": "16.50",
+          "description": "Ritual 'whiskey' (0% abv), Sichuan pepper syrup, non-alcoholic aromatic bitters over block ice"
+        }
+      ]
+    },
+    {
+      "section": "COCKTAILS",
+      "items": [
+        {
+          "name": "BRISTOL STREET",
+          "price": "17.00",
+          "description": "Grainger's organic vodka, strawberries, lemon & tarragon served on the rocks"
+        },
+        {
+          "name": "MARITIME MULE",
+          "price": "17.00",
+          "description": "Grainger's organic vodka, lime, mint, sea salt & Regatta ginger beer in a copper mug"
+        },
+        {
+          "name": "ROSEWOOD",
+          "price": "18.50",
+          "description": "Botanist gin, limoncello, lime, rosemary & grapefruit essence charged with Regatta tonic"
+        },
+        {
+          "name": "THE AWAKENING",
+          "price": "18.50",
+          "description": "Roku gin, elderflower, basil, lemon, grapefruit & Sichuan pepper served up"
+        },
+        {
+          "name": "STANDING ROOM",
+          "price": "18.00",
+          "description": "Funk Harbor silver rum, pineapple, lime juice, Creme de Cacao & hazelnut syrup over crushed ice with an espresso float"
+        },
+        {
+          "name": "MARGARITA VERDE",
+          "price": "17.00",
+          "description": "100% blue agave silver tequila, agave, lime, cucumber, basil, jalapeño & chili salt on ice"
+        },
+        {
+          "name": "MESCALERO",
+          "price": "18.50",
+          "description": "Del Maguey 'Vida' mezcal, 100% blue agave silver tequila, lime, passion fruit, & pineapple served up"
+        },
+        {
+          "name": "A NIGHT IN OSAKA",
+          "price": "19.00",
+          "description": "Suntory 'Toki' whiskey, Amaro Nonino, amontillado sherry, maple syrup & grapefruit bitters served up"
+        },
+        {
+          "name": "THE VISIONARY",
+          "price": "18.00",
+          "description": "Black Market rye whiskey, allspice dram, brown sugar, cinnamon & Angostura aromatic bitters over block ice with smoked rosemary"
+        },
+        {
+          "name": "BARREL'LY' AGED",
+          "price": "17.00",
+          "description": "Evan Williams straight bourbon, vanilla bean, lime & pineapple shaken with vigor & served up"
+        }
+      ]
+    },
+    {
+      "section": "BARTENDER'S SPECIAL",
+      "items": [
+        {
+          "name": "JUBILEE",
+          "price": "17.50",
+          "description": "Prairie organic gin, fresh lemon, Aperol, and limoncello served over ice and charged with Prosecco"
+        }
+      ]
+    },
+    {
+      "section": "APPETIZERS",
+      "items": [
+        {
+          "name": "CLAM CHOWDER",
+          "price": "16",
+          "description": "applewood smoked bacon"
+        },
+        {
+          "name": "LOBSTER BISQUE",
+          "price": "21",
+          "description": "California spiny lobster, brioche croutons, tarragon"
+        },
+        {
+          "name": "ATLANTIC COD FISH TACOS",
+          "price": "20",
+          "description": "beer battered, cabbage slaw, roasted salsa, crema"
+        },
+        {
+          "name": "CRISP CALAMARI",
+          "price": "22",
+          "description": "harissa aioli and cilantro-mint sweet chili sauce"
+        },
+        {
+          "name": "JUMBO LUMP CRAB CAKE",
+          "price": "25",
+          "description": "celery root remoulade"
+        },
+        {
+          "name": "OYSTERS ROCKEFELLER",
+          "price": "25",
+          "description": "glazed with fennel, baby spinach, and parmesan"
+        },
+        {
+          "name": "FARMED TOTTEN INLET MUSSELS GARBANZO",
+          "price": "25",
+          "description": "pancetta, harissa, parsley & lemon, with crispy french baguette"
+        },
+        {
+          "name": "WILD PACIFIC BIGEYE TUNA POKE",
+          "price": "25",
+          "description": "soy sauce, avocado, wasabi tobiko, sesame seeds"
+        },
+        {
+          "name": "FARMED MANILA CLAMS with CHORIZO",
+          "price": "26",
+          "description": "steamed in saffron broth with crispy french baguette"
+        },
+        {
+          "name": "WILD SPANISH OCTOPUS",
+          "price": "26",
+          "description": "charcoal grilled with fingerling potato, niçoise olives, roasted tomato, pine nuts, olive oil"
+        },
+        {
+          "name": "WILD PACIFIC HALIBUT CHEEKS",
+          "price": "27",
+          "description": "pan roasted, braised fennel, brown butter lemon sauce"
+        },
+        {
+          "name": "ROASTED HALIBUT TAIL",
+          "price": "29",
+          "description": "roasted tomato salsa, pickled mango, soft corn tortillas"
+        }
+      ]
+    },
+    {
+      "section": "SUSHI",
+      "items": [
+        {
+          "name": "HONEYMOON OYSTER",
+          "price": "15",
+          "description": "freshly shucked oyster with uni roe, tobiko, ikura and quail egg"
+        },
+        {
+          "name": "GARDEN ROLL",
+          "price": "19",
+          "description": "avocado, cucumber, garnet yam, heirloom tomato, shiso, wasabi vinaigrette"
+        },
+        {
+          "name": "SMOKED HAMACHI NACHOS",
+          "price": "22",
+          "description": "farmed japanese yellowtail, yucca chips, asian pear, toasted marcona almonds"
+        },
+        {
+          "name": "KING SALMON ROLL",
+          "price": "24",
+          "description": "farmed new zealand king salmon, avocado, hazelnuts, papaya, and white soy lime vinaigrette"
+        },
+        {
+          "name": "TROJAN ROLL",
+          "price": "25",
+          "description": "wild bigeye tuna, yuzu tobiko, avocado, wasabi vinaigrette, traditional ponzu sauce"
+        },
+        {
+          "name": "BLUEFIN TORO TARTARE",
+          "price": "28",
+          "description": "green tea nori, warm sushi rice, quail egg, sweet soy sauce"
+        },
+        {
+          "name": "SPICY LOBSTER ROLL",
+          "price": "35",
+          "description": "avocado, sesame soy paper, spicy mayo, lobster, eel sauce"
+        }
+      ]
+    },
+    {
+      "section": "SALADS & SANDWICHES",
+      "items": [
+        {
+          "name": "MIXED ORGANIC GREENS",
+          "price": "14",
+          "description": "golden balsamic vinaigrette"
+        },
+        {
+          "name": "CAESAR SALAD",
+          "price": "15",
+          "description": "romaine hearts, 18 month reggiano, white anchovies"
+        },
+        {
+          "name": "WEDGE SALAD",
+          "price": "16",
+          "description": "bacon and blue goat cheese"
+        },
+        {
+          "name": "ROASTED BEETS",
+          "price": "16",
+          "description": "tandoori spiced yogurt and wild arugula"
+        }
+      ]
+    },
+    {
+      "section": "CRUSTACEANS",
+      "items": [
+        {
+          "name": "WILD MARYLAND SOFT SHELL CRAB",
+          "price": "53",
+          "description": "roasted eggplant, coconut rice, bok choy, red curry sauce, peanut brittle"
+        },
+        {
+          "name": "LIVE WILD NORTH AMERICAN HARD SHELL LOBSTER",
+          "price": "38/POUND",
+          "description": "steamed with our homemade coleslaw and melted butter"
+        },
+        {
+          "name": "LIVE WILD SANTA BARBARA SPOT PRAWNS 62/¾ POUND · 82/POUND · 122/1½ POUNDS",
+          "description": "fingerling potatoes, aji verde sauce"
+        },
+        {
+          "name": "LIVE WILD BARENTS SEA RED KING CRAB",
+          "price": "98/POUND",
+          "description": "steamed and served whole with choice of two sides (average size 7 to 10 pounds)"
+        },
+        {
+          "name": "WILD ALASKAN RED KING CRAB LEGS 150/POUND · 195/1½ POUNDS",
+          "description": "steamed, with homemade coleslaw and melted butter"
+        }
+      ]
+    },
+    {
+      "section": "SIDES",
+      "items": [
+        {
+          "name": "FRENCH FRIES",
+          "price": "12"
+        },
+        {
+          "name": "BRAISED KALE greek yogurt & hazelnuts",
+          "price": "12"
+        },
+        {
+          "name": "YUKON GOLD MASHED POTATOES",
+          "price": "13"
+        },
+        {
+          "name": "MAC & CHEESE seven cheese sauce",
+          "price": "15"
+        },
+        {
+          "name": "SAUTÉED ASPARAGUS GREMOLATA",
+          "price": "15"
+        }
+      ]
+    },
+    {
+      "section": "FIRST OF SEASON: WILD PACIFIC HALIBUT",
+      "items": [
+        {
+          "name": "PAN SEARED HALIBUT fire roasted corn, fresno chili, cotija cheese",
+          "price": "56"
+        }
+      ]
+    },
+    {
+      "section": "ENTREES",
+      "items": [
+        {
+          "name": "WILD ICELANDIC COD FISH & CHIPS",
+          "price": "37",
+          "description": "from the grindavík auction"
+        },
+        {
+          "name": "WILD PACIFIC BIGEYE TUNA",
+          "price": "46",
+          "description": "togarashi seared, with grilled maitake mushrooms and sizzling sesame oil"
+        },
+        {
+          "name": "WILD MEXICAN SWORDFISH",
+          "price": "44",
+          "description": "a la plancha, with spaghetti squash and tapenade"
+        },
+        {
+          "name": "FARMED NEW ZEALAND KING SALMON",
+          "description": "farro risotto with lovage and black garlic",
+          "price": "46"
+        },
+        {
+          "name": "WILD ALASKAN BLACK COD (SABLEFISH)",
+          "description": "soba noodles, green onions, spiced fish broth",
+          "price": "48"
+        },
+        {
+          "name": "WILD ROSS SEA CHILEAN SEA BASS (MSC certified)",
+          "price": "55",
+          "description": "butternut squash gnocchi, sage brown butter"
+        },
+        {
+          "name": "SHRIMP SCAMPI",
+          "price": "42",
+          "description": "wild mexican jumbo shrimp, pappardelle, garlic oil, white wine butter sauce"
+        },
+        {
+          "name": "WILD EASTERN SEA SCALLOPS",
+          "price": "49",
+          "description": "cauliflower puree, curried roasted cauliflower, pickled golden raisins, soy brown butter"
+        },
+        {
+          "name": "CIOPPINO",
+          "price": "45",
+          "description": "dungeness crab, jumbo shrimp, and fresh fish in a shellfish broth"
+        },
+        {
+          "name": "CHARCOAL GRILLED \"MARY'S\" ORGANIC CHICKEN",
+          "price": "39",
+          "description": "with herbed couscous"
+        }
+      ]
+    },
+    {
+      "section": "USDA PRIME STEAKS",
+      "items": [
+        {
+          "name": "6oz Petite Cut*",
+          "price": "58"
+        },
+        {
+          "name": "8oz Center Cut*",
+          "price": "62"
+        },
+        {
+          "name": "10oz Center Cut*",
+          "price": "72"
+        }
+      ]
+    },
+    {
+      "section": "WAGYU GOLD",
+      "items": [
+        {
+          "name": "8oz Manhattan Cut*",
+          "price": "92"
+        },
+        {
+          "name": "12oz Thick Cut NY Strip*",
+          "price": "100"
+        },
+        {
+          "name": "3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*",
+          "price": "105"
+        },
+        {
+          "name": "14oz NY Strip Steak*",
+          "price": "65"
+        },
+        {
+          "name": "16oz Ribeye Steak*",
+          "price": "72"
+        },
+        {
+          "name": "6oz Petite Cut*",
+          "price": "72"
+        },
+        {
+          "name": "8oz Center Cut*",
+          "price": "92"
+        },
+        {
+          "name": "12oz Eye of Ribeye Steak*",
+          "price": "115"
+        }
+      ]
+    }
+  ]
+}
