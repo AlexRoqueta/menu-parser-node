@@ -20,10 +20,27 @@ type ParsedMenu = {
 };
 
 const DECORATIVE_SECTION_RE = /^::\s*(.+?)\s*::$/;
-const MONEY_AT_END_RE = /\b(\d+\.\d{2}|\d+\/(?:POUND|LB|DOZEN)|\d+\/(?:½|¾)?\s*POUND(?:S)?)\s*$/i;
+const MONEY_AT_END_RE =
+  /\b(\d+\.\d{2}|\d+\/(?:POUND|LB|DOZEN)|\d+\/(?:½|¾)?\s*POUND(?:S)?)\s*$/i;
 const SPACED_MONEY_AT_END_RE = /\b(\d{1,3})\s+(\d{2})\s*$/;
 const SIMPLE_PRICE_AT_END_RE = /\b(\d{1,3})\s*$/;
-const SKIP_SECTION_RE = /^(RAW BAR\*?|CHILLED SHELLFISH|ICED SHELLFISH PLATTERS)$/i;
+
+// Exclude these sections from meal importing
+const SKIP_SECTION_RE =
+  /^(RAW BAR\*?|SPIRIT FREE|COCKTAILS|BARTENDER'S SPECIAL|APPETIZERS|SIDES)$/i;
+
+// Only these sections may emit meal items
+const ALLOWED_MEAL_SECTIONS = new Set<string>([
+  'SUSHI',
+  'SALADS & SANDWICHES',
+  'CRUSTACEANS',
+  'CHILLED SHELLFISH',
+  'ICED SHELLFISH PLATTERS',
+  'ENTREES',
+  'USDA PRIME STEAKS',
+  'WAGYU GOLD',
+  'FIRST OF SEASON: WILD PACIFIC HALIBUT'
+]);
 
 const KNOWN_PRICES: Record<string, string> = {
   'WILD PACIFIC BIGEYE TUNA POKE': '25',
@@ -72,8 +89,14 @@ function cleanField(text?: string): string | undefined {
   if (!text) return undefined;
 
   const cleaned = fixMojibake(text)
-    .replace(/3oz Ribeye\* · 3oz New York\* · 3oz Filet Mignon\*/g, '3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*')
-    .replace(/62\/¾ POUND 82\/POUND 122\/1½ POUNDS/g, '62/¾ POUND · 82/POUND · 122/1½ POUNDS')
+    .replace(
+      /3oz Ribeye\* · 3oz New York\* · 3oz Filet Mignon\*/g,
+      '3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*'
+    )
+    .replace(
+      /62\/¾ POUND 82\/POUND 122\/1½ POUNDS/g,
+      '62/¾ POUND · 82/POUND · 122/1½ POUNDS'
+    )
     .replace(/150\/POUND 195\/1½ POUNDS/g, '150/POUND · 195/1½ POUNDS')
     .replace(/\s+/g, ' ')
     .trim();
@@ -106,6 +129,8 @@ function isKnownSection(line: string): boolean {
     'SUSHI',
     'SALADS & SANDWICHES',
     'CRUSTACEANS',
+    'CHILLED SHELLFISH',
+    'ICED SHELLFISH PLATTERS',
     'SIDES',
     'ENTREES',
     'USDA PRIME STEAKS',
@@ -154,12 +179,33 @@ function isLabelOnly(line: string): boolean {
   ].includes(line.trim());
 }
 
+function isRejectedMealLine(line: string): boolean {
+  const cleaned = cleanField(line) ?? line;
+
+  return (
+    !cleaned ||
+    /^\(.*crassostrea.*\)/i.test(cleaned) ||
+    /^\.{3,}$/.test(cleaned) ||
+    /\.{3,}/.test(cleaned) ||
+    /^[\d./½¾\s]+$/.test(cleaned) ||
+    /^serves\s+\d/i.test(cleaned) ||
+    /^(eastern|pacific)$/i.test(cleaned) ||
+    /^the raw bar$/i.test(cleaned) ||
+    /^choice of sauces$/i.test(cleaned) ||
+    /^featured oysters/i.test(cleaned)
+  );
+}
+
 function parsePriceFromLine(line: string): { name: string; price?: string } {
   const cleaned = line.replace(/\.+/g, ' ').replace(/\s+/g, ' ').trim();
 
   const spacedMoneyMatch = cleaned.match(SPACED_MONEY_AT_END_RE);
   if (spacedMoneyMatch && spacedMoneyMatch.index !== undefined) {
-    const name = cleaned.slice(0, spacedMoneyMatch.index).trim().replace(/[,\-]+$/, '').trim();
+    const name = cleaned
+      .slice(0, spacedMoneyMatch.index)
+      .trim()
+      .replace(/[,\-]+$/, '')
+      .trim();
     const price = `${spacedMoneyMatch[1]}.${spacedMoneyMatch[2]}`;
     if (name) return { name, price };
   }
@@ -167,7 +213,11 @@ function parsePriceFromLine(line: string): { name: string; price?: string } {
   const moneyMatch = cleaned.match(MONEY_AT_END_RE);
   if (moneyMatch && moneyMatch.index !== undefined) {
     const price = moneyMatch[1].replace(/\s+/g, '');
-    const name = cleaned.slice(0, moneyMatch.index).trim().replace(/[,\-]+$/, '').trim();
+    const name = cleaned
+      .slice(0, moneyMatch.index)
+      .trim()
+      .replace(/[,\-]+$/, '')
+      .trim();
     return { name, price };
   }
 
@@ -190,6 +240,7 @@ function shouldAppendDescription(line: string): boolean {
   if (MONEY_AT_END_RE.test(line)) return false;
   if (SPACED_MONEY_AT_END_RE.test(line)) return false;
   if (SIMPLE_PRICE_AT_END_RE.test(line) && /[A-Za-z]/.test(line)) return false;
+  if (isRejectedMealLine(line)) return false;
   return /[a-z(]/.test(line);
 }
 
@@ -227,11 +278,16 @@ function dedupeSections(sections: MenuSection[]): MenuSection[] {
     const byName = new Map<string, MenuItem>();
 
     for (const existing of target.items) {
-      byName.set((cleanField(existing.name) ?? existing.name).trim().toUpperCase(), existing);
+      byName.set(
+        (cleanField(existing.name) ?? existing.name).trim().toUpperCase(),
+        existing
+      );
     }
 
     for (const item of section.items) {
-      const normalizedName = (cleanField(item.name) ?? item.name).trim().toUpperCase();
+      const normalizedName = (cleanField(item.name) ?? item.name)
+        .trim()
+        .toUpperCase();
       const existing = byName.get(normalizedName);
 
       if (!existing) {
@@ -261,7 +317,9 @@ function repairEntrees(section: MenuSection): MenuSection {
       item.name === 'FARMED NEW ZEALAND KING SALMON' &&
       item.description?.includes('WILD ALASKAN BLACK COD (SABLEFISH)')
     ) {
-      const parts = item.description.split('WILD ALASKAN BLACK COD (SABLEFISH)');
+      const parts = item.description.split(
+        'WILD ALASKAN BLACK COD (SABLEFISH)'
+      );
       repaired.push({
         name: 'FARMED NEW ZEALAND KING SALMON',
         description: parts[0].trim()
@@ -269,7 +327,9 @@ function repairEntrees(section: MenuSection): MenuSection {
 
       repaired.push({
         name: 'WILD ALASKAN BLACK COD (SABLEFISH)',
-        description: parts[1]?.trim() || 'soba noodles, green onions, spiced fish broth'
+        description:
+          parts[1]?.trim() ||
+          'soba noodles, green onions, spiced fish broth'
       });
 
       continue;
@@ -300,7 +360,9 @@ function applyKnownPrices(sections: MenuSection[]): MenuSection[] {
   return sections.map((section) => {
     const items = section.items.map((item) => {
       if (!item.price) {
-        const key = (cleanField(item.name) ?? item.name).trim().toUpperCase();
+        const key = (cleanField(item.name) ?? item.name)
+          .trim()
+          .toUpperCase();
         const known = KNOWN_PRICES[key];
         if (known) {
           return { ...item, price: known };
@@ -338,11 +400,14 @@ function repairSections(sections: MenuSection[]): MenuSection[] {
 
             if (/^(½½WHOLE|½WHOLE|½ WHOLE|WHOLE)$/i.test(name)) return false;
             if (/^First of Season!$/i.test(name)) return false;
+            if (isRejectedMealLine(name)) return false;
 
             if (section.section === 'SUSHI') {
               if (
                 /^serves\s+\d/i.test(name) ||
-                /^(KUMAMOTO|WILDCAT|RAPPAHANNOCK|WILD LITTLENECK CLAMS|FARMED PERUVIAN BAY SCALLOPS|FARMED TOTTEN INLET MEDITERRANEAN MUSSELS|1 LB NORTH AMERICAN HARD SHELL LOBSTER|LARGE CHANNEL ISLANDS RED SEA URCHIN)$/i.test(name)
+                /^(KUMAMOTO|WILDCAT|RAPPAHANNOCK|WILD LITTLENECK CLAMS|FARMED PERUVIAN BAY SCALLOPS|FARMED TOTTEN INLET MEDITERRANEAN MUSSELS|1 LB NORTH AMERICAN HARD SHELL LOBSTER|LARGE CHANNEL ISLANDS RED SEA URCHIN)$/i.test(
+                  name
+                )
               ) {
                 return false;
               }
@@ -350,16 +415,19 @@ function repairSections(sections: MenuSection[]): MenuSection[] {
 
             if (section.section === 'CRUSTACEANS') {
               if (
-                /^(ROASTED CHICKEN & BABY KALE SALAD|WILD JUMBO SHRIMP LOUIE SALAD\*|BACON CHEDDAR CHEESEBURGER|NEW ENGLAND LOBSTER ROLL)$/i.test(name)
+                /^(ROASTED CHICKEN & BABY KALE SALAD|WILD JUMBO SHRIMP LOUIE SALAD\*|BACON CHEDDAR CHEESEBURGER|NEW ENGLAND LOBSTER ROLL)$/i.test(
+                  name
+                )
               ) {
                 return false;
               }
             }
 
-            if (section.section === 'FIRST OF SEASON: WILD PACIFIC HALIBUT') {
-              if (/^The Wild Pacific Halibut Season has opened!/i.test(name)) {
-                return false;
-              }
+            if (
+              section.section === 'FIRST OF SEASON: WILD PACIFIC HALIBUT' &&
+              /^The Wild Pacific Halibut Season has opened!/i.test(name)
+            ) {
+              return false;
             }
 
             return true;
@@ -367,12 +435,9 @@ function repairSections(sections: MenuSection[]): MenuSection[] {
 
         return { ...section, items };
       })
-      .map((section) => {
-        if (section.section === 'ENTREES') {
-          return repairEntrees(section);
-        }
-        return section;
-      })
+      .map((section) =>
+        section.section === 'ENTREES' ? repairEntrees(section) : section
+      )
       .filter((section) => section.items.length > 0)
   );
 }
@@ -405,9 +470,13 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       continue;
     }
 
-    if (skipComplexSection) {
+    if (skipComplexSection) continue;
+
+    if (!ALLOWED_MEAL_SECTIONS.has(current.section)) {
       continue;
     }
+
+    if (isRejectedMealLine(line)) continue;
 
     if (shouldAppendDescription(line) && lastItem) {
       addDescription(lastItem, line);
@@ -419,10 +488,15 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
 
     const normalizedName = cleanField(parsed.name) ?? parsed.name;
     if (isLabelOnly(normalizedName) && !parsed.price) continue;
+    if (isRejectedMealLine(normalizedName)) continue;
 
-    if (parsed.price || /[A-Za-z]/.test(parsed.name)) {
+    const looksLikeMealTitle =
+      /^[A-Z0-9][A-Z0-9 '&()\-,.*:/]+$/i.test(normalizedName) &&
+      normalizedName.length >= 3;
+
+    if (parsed.price || looksLikeMealTitle) {
       const item: MenuItem = {
-        name: parsed.name,
+        name: normalizedName,
         ...(parsed.price ? { price: parsed.price } : {})
       };
       current.items.push(item);
