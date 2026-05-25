@@ -429,6 +429,46 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     }
   }
 
+  // Dedup items within each section (name + price + description signature)
+  for (const sec of merged) {
+    const seen = new Set<string>();
+    sec.items = sec.items.filter((it) => {
+      const sig = `${it.name}|${it.price ?? ''}|${it.description ?? ''}`.toLowerCase();
+      if (seen.has(sig)) return false;
+      seen.add(sig);
+      return true;
+    });
+  }
+
+  // Dedup notes strings (collapse repeated phrase-level duplicates)
+  // Handles "served with X served with X" and "phrase. phrase." patterns.
+  for (const sec of merged) {
+    if (!sec.notes) continue;
+    let notes = sec.notes.trim();
+    // If the same notes string is concatenated to itself, collapse it.
+    const half = Math.floor(notes.length / 2);
+    if (notes.length % 2 === 1 && notes[half] === ' ') {
+      const left = notes.slice(0, half).trim();
+      const right = notes.slice(half + 1).trim();
+      if (left.toLowerCase() === right.toLowerCase()) notes = left;
+    } else if (notes.length % 2 === 0) {
+      const left = notes.slice(0, half).trim();
+      const right = notes.slice(half).trim();
+      if (left.toLowerCase() === right.toLowerCase()) notes = left;
+    }
+    // Also dedup sentence-level repeats.
+    const parts = notes.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+    const seen = new Set<string>();
+    const uniq: string[] = [];
+    for (const p of parts) {
+      const key = p.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniq.push(p);
+    }
+    sec.notes = uniq.join(' ');
+  }
+
   return { sourceFile, extractedAt: new Date().toISOString(), sections: merged };
 }
 
