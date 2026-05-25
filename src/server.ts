@@ -39,12 +39,20 @@ const INLINE_SECTION_NAMES = new Set([
 const PROMO_SECTIONS = new Set([
   'FIRST OF SEASON: WILD PACIFIC HALIBUT'
 ]);
+// Steak-type sections where size/price line expansion logic applies
+const STEAK_SECTION_RE = /STEAK|WAGYU|FILET|RIBEYE/i;
+// Parent item names that can have size-variant children attached (uppercase parent line)
+const STEAK_PARENT_RE = /^(?:FILET MIGNON|NEW YORK STEAK|WAGYU FLIGHT|PRIME NEW YORK STRIP|PRIME RIBEYE|RIBEYE)$/i;
 
 const PRICE_RE = /(\$?\d+(?:\.\d{2})?)\s*$/;
 const LEADER_DOTS_RE = /\.{3,}/g;
 const GLUED_PRICES_RE = /(\d+\.\d{2})(?=\d)/g;
 const DATE_STUB_RE = /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+\w+(?:\s+\d+(?:st|nd|rd|th)?)?\b/g;
 const STEAK_SIZE_RE = /(\d+oz\s+[^*·]+?\*)/g;
+// Matches a line like "6oz Petite Cut* 58" or "8oz Manhattan Cut* 92"
+const SIZE_PRICE_LINE_RE = /^(\d+oz\s+[^*]+?\*)\s+(\$?\d+(?:\.\d{2})?)$/;
+// Matches a line with multiple sizes separated by · and one price at the end: "3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*  105"
+const MULTI_SIZE_LINE_RE = /^((?:\d+oz\s+[^*·]+?\*\s*·\s*)+\d+oz\s+[^*]+?\*)\s+(\$?\d+(?:\.\d{2})?)$/;
 const JUNK_RE = /^(?:\*+|[½¼¾]+|th|nd|rd|st|EACH½ DOZEN1 DOZEN|EACH½ POUND1 POUND|HALFWHOLE|½WHOLE|½½WHOLE|[\s\W]+)$/i;
 
 const upload = multer({
@@ -77,6 +85,7 @@ function isJunk(line: string): boolean {
   if (/^first of season!?$/i.test(line)) return true;
   if (/^[A-Z][A-Z\s&]+(?:RANCH|FARMS?|RANCHES)\b.*·/i.test(line)) return true;
   if (/^SNAKE RIVER FARMS\b/i.test(line)) return true;
+  if (/^DOUBLE R RANCH\b/i.test(line)) return true;
   return false;
 }
 
@@ -121,6 +130,9 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
   const lines = normalizeLines(text);
   const sections: MenuSection[] = [];
   let current: MenuSection = { section: 'MENU', items: [] };
+  // Track the most recent "parent" steak item name (e.g. "FILET MIGNON") so we can
+  // attach sized children to it across multiple lines.
+  let lastSteakParent: string | null = null;
 
   function flushCurrent() {
     if (current.items.length > 0 || current.section !== 'MENU') {
@@ -140,17 +152,59 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     if (isSection(line)) {
       flushCurrent();
       current = { section: extractSectionName(line), items: [] };
+      lastSteakParent = null;
       continue;
     }
 
     if (INLINE_SECTION_NAMES.has(line.toUpperCase())) {
       flushCurrent();
       current = { section: line.toUpperCase(), items: [] };
+      lastSteakParent = null;
       continue;
     }
 
     if (TOP_LEVEL_HEADINGS.has(line.toUpperCase())) continue;
     if (isJunk(line)) continue;
+
+    const inSteakSection = STEAK_SECTION_RE.test(current.section);
+
+    // STEAK HANDLING (inside steak/wagyu sections)
+    if (inSteakSection) {
+      // Case A: parent line by itself, e.g. "FILET MIGNON" or "NEW YORK STEAK"
+      if (STEAK_PARENT_RE.test(line)) {
+        lastSteakParent = line.toUpperCase();
+        continue;
+      }
+      // Case B: multi-size shared price line, e.g.
+      //   "3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*  105"
+      const multi = line.match(MULTI_SIZE_LINE_RE);
+      if (multi && lastSteakParent) {
+        const sizesPart = multi[1];
+        const price = multi[2];
+        const sizes = sizesPart.split(/\s*·\s*/).map((s) => s.trim()).filter(Boolean);
+        for (let i = 0; i < sizes.length; i++) {
+          current.items.push({
+            name: `${lastSteakParent} — ${sizes[i]}`,
+            // Only attach price to first variant — the price is shared/flight pricing
+            price: i === 0 ? price : undefined
+          });
+        }
+        continue;
+      }
+      // Case C: single size+price line, e.g. "6oz Petite Cut* 58"
+      const sp = line.match(SIZE_PRICE_LINE_RE);
+      if (sp && lastSteakParent) {
+        const size = sp[1].trim();
+        const price = sp[2];
+        current.items.push({
+          name: `${lastSteakParent} — ${size}`,
+          price
+        });
+        continue;
+      }
+      // Case D: standalone item with size baked into description (e.g. "PRIME RIBEYE" then "16oz Ribeye Steak*  72")
+      // Falls through to the generic continuation/new-item logic below.
+    }
 
     // Parenthetical-led continuation: "(MSC certified) ..."
     if (/^\(/.test(line) && current.items.length > 0) {
@@ -175,6 +229,11 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       continue;
     }
 
+    // New item — reset steak parent tracker so the next standalone item doesn't
+    // accidentally inherit a stale parent name.
+    if (inSteakSection && !STEAK_PARENT_RE.test(line)) {
+      lastSteakParent = null;
+    }
     current.items.push(parseItem(line));
   }
 
@@ -190,10 +249,9 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     }
   }
 
-  // Steak-size expansion (only inside steak-type sections)
-  const STEAK_SECTIONS = /STEAK|WAGYU|FILET|RIBEYE/i;
+  // Legacy steak-size expansion (still useful for items where sizes ended up in description)
   for (const section of sections) {
-    if (!STEAK_SECTIONS.test(section.section)) continue;
+    if (!STEAK_SECTION_RE.test(section.section)) continue;
     const expanded: MenuItem[] = [];
     for (const item of section.items) {
       // Look for size variants in BOTH name and description
