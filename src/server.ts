@@ -9,8 +9,14 @@ type MenuItem = {
   description?: string;
   price?: string;
   priceTiers?: PriceTier[];
+  pieceCounts?: number[]; // For platter items: pieces per platter tier
 };
-type MenuSection = { section: string; items: MenuItem[] };
+type MenuSection = {
+  section: string;
+  items: MenuItem[];
+  notes?: string;
+  platterTiers?: { label: string; price: number }[]; // For ICED SHELLFISH PLATTERS
+};
 type ParsedMenu = { sourceFile: string; extractedAt: string; sections: MenuSection[] };
 type TableSommDish = {
   id: string;
@@ -20,6 +26,7 @@ type TableSommDish = {
   style: string;
   price: number | null;
   priceTiers?: PriceTier[];
+  pieceCounts?: number[];
   tags: string[];
   notes: string;
   section: string;
@@ -35,23 +42,26 @@ const INLINE_SECTION_NAMES = new Set([
   'ICED SHELLFISH PLATTERS', 'WHOLE FISH', 'ENTREES', 'USDA PRIME STEAKS',
   'WAGYU GOLD', 'SIDES', 'CRUSTACEANS', 'SALADS & SANDWICHES'
 ]);
-// Promo/marketing section blocks — preserve as a section but mark items as non-dish
 const PROMO_SECTIONS = new Set([
   'FIRST OF SEASON: WILD PACIFIC HALIBUT'
 ]);
-// Steak-type sections where size/price line expansion logic applies
 const STEAK_SECTION_RE = /STEAK|WAGYU|FILET|RIBEYE/i;
-// Parent item names that can have size-variant children attached (uppercase parent line)
 const STEAK_PARENT_RE = /^(?:FILET MIGNON|NEW YORK STEAK|WAGYU FLIGHT|PRIME NEW YORK STRIP|PRIME RIBEYE|RIBEYE)$/i;
 
+// Platter section helpers
+const PLATTER_SECTION = 'ICED SHELLFISH PLATTERS';
+const PLATTER_TIER_RE = /^THE (GRAND|DELUXE|KING)$/i;
+const PLATTER_SERVES_RE = /^serves\s+\d+(?:-\d+)?$/i;
+// Row format examples after normalization:
+//   "KUMAMOTO 246"               -> name=KUMAMOTO, counts=[2,4,6]
+//   "WILD JUMBO WHITE SHRIMP mexico 4714" -> name=..., counts=[4,7,14]
+//   "WHOLE 62.00 112.00 215.00"  -> platter totals
 const PRICE_RE = /(\$?\d+(?:\.\d{2})?)\s*$/;
 const LEADER_DOTS_RE = /\.{3,}/g;
 const GLUED_PRICES_RE = /(\d+\.\d{2})(?=\d)/g;
 const DATE_STUB_RE = /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+\w+(?:\s+\d+(?:st|nd|rd|th)?)?\b/g;
 const STEAK_SIZE_RE = /(\d+oz\s+[^*·]+?\*)/g;
-// Matches a line like "6oz Petite Cut* 58" or "8oz Manhattan Cut* 92"
 const SIZE_PRICE_LINE_RE = /^(\d+oz\s+[^*]+?\*)\s+(\$?\d+(?:\.\d{2})?)$/;
-// Matches a line with multiple sizes separated by · and one price at the end: "3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*  105"
 const MULTI_SIZE_LINE_RE = /^((?:\d+oz\s+[^*·]+?\*\s*·\s*)+\d+oz\s+[^*]+?\*)\s+(\$?\d+(?:\.\d{2})?)$/;
 const JUNK_RE = /^(?:\*+|[½¼¾]+|th|nd|rd|st|EACH½ DOZEN1 DOZEN|EACH½ POUND1 POUND|HALFWHOLE|½WHOLE|½½WHOLE|[\s\W]+)$/i;
 
@@ -90,13 +100,11 @@ function isJunk(line: string): boolean {
 }
 
 function looksLikeNewItem(line: string): boolean {
-  // Must be mostly uppercase at the start; lowercase-led lines are descriptions.
   const firstWord = line.split(/\s/)[0];
   if (!/^[A-Z0-9'"&\-\.()*]/.test(firstWord)) return false;
   const firstTokenMatch = line.match(/^[A-Z0-9'"&\-\.()*]+(?:\s+[A-Z0-9'"&\-\.()*]+)*/);
   if (!firstTokenMatch) return false;
   const heading = firstTokenMatch[0];
-  // Skip lines that start with a parenthetical alone (e.g. "(MSC certified) ...")
   if (/^\([^)]+\)$/.test(heading.trim())) return false;
   const upperCount = (heading.match(/[A-Z]/g) || []).length;
   if (upperCount < 2) return false;
@@ -126,23 +134,70 @@ function parseItem(line: string): MenuItem {
   return { name, price: prices[0], priceTiers: numericTiers };
 }
 
+/**
+ * Split a glued run of digits into 3 piece counts for platter rows.
+ * Strategy: try to find a split into 3 numbers where each is reasonable (1-99).
+ * Prefer splits where counts are non-decreasing (typical for Grand < Deluxe < King).
+ * Examples:
+ *   "246"   -> [2, 4, 6]
+ *   "4714"  -> [4, 7, 14]
+ *   "61218" -> [6, 12, 18]
+ */
+function splitGluedCounts(digits: string): number[] | null {
+  if (!/^\d+$/.test(digits) || digits.length < 3) return null;
+  const candidates: number[][] = [];
+  // Try all ways to split into 3 numbers where each is 1 or 2 digits
+  for (let i = 1; i <= 2 && i < digits.length; i++) {
+    for (let j = i + 1; j <= i + 2 && j < digits.length; j++) {
+      const a = parseInt(digits.slice(0, i), 10);
+      const b = parseInt(digits.slice(i, j), 10);
+      const c = parseInt(digits.slice(j), 10);
+      if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) continue;
+      if (a < 1 || b < 1 || c < 1) continue;
+      if (a > 99 || b > 99 || c > 99) continue;
+      candidates.push([a, b, c]);
+    }
+  }
+  if (candidates.length === 0) return null;
+  // Prefer non-decreasing sequences (Grand < Deluxe < King)
+  const ndec = candidates.filter((c) => c[0] <= c[1] && c[1] <= c[2]);
+  if (ndec.length > 0) {
+    // Among non-decreasing, prefer the one with smallest total span (most "natural")
+    ndec.sort((x, y) => (x[2] - x[0]) - (y[2] - y[0]));
+    return ndec[0];
+  }
+  return candidates[0];
+}
+
 function parseMenuText(text: string, sourceFile: string): ParsedMenu {
   const lines = normalizeLines(text);
   const sections: MenuSection[] = [];
   let current: MenuSection = { section: 'MENU', items: [] };
-  // Track the most recent "parent" steak item name (e.g. "FILET MIGNON") so we can
-  // attach sized children to it across multiple lines.
   let lastSteakParent: string | null = null;
+  // Platter section state
+  let platterCollectingTiers = false;
+  let platterTierLabels: string[] = []; // ["GRAND","DELUXE","KING"]
+  let platterTotalsCaptured = false;
 
   function flushCurrent() {
-    if (current.items.length > 0 || current.section !== 'MENU') {
+    if (current.items.length > 0 || current.section !== 'MENU' || current.notes) {
       const prev = sections[sections.length - 1];
       if (prev && prev.section === current.section) {
         prev.items.push(...current.items);
+        if (current.notes) {
+          prev.notes = prev.notes ? `${prev.notes} ${current.notes}` : current.notes;
+        }
+        if (current.platterTiers && !prev.platterTiers) prev.platterTiers = current.platterTiers;
       } else {
         sections.push(current);
       }
     }
+  }
+
+  function resetPlatterState() {
+    platterCollectingTiers = false;
+    platterTierLabels = [];
+    platterTotalsCaptured = false;
   }
 
   for (const rawLine of lines) {
@@ -153,6 +208,7 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       flushCurrent();
       current = { section: extractSectionName(line), items: [] };
       lastSteakParent = null;
+      resetPlatterState();
       continue;
     }
 
@@ -160,23 +216,87 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       flushCurrent();
       current = { section: line.toUpperCase(), items: [] };
       lastSteakParent = null;
+      resetPlatterState();
+      if (current.section === PLATTER_SECTION) platterCollectingTiers = true;
       continue;
     }
 
-    if (TOP_LEVEL_HEADINGS.has(line.toUpperCase())) continue;
+    if (TOP_LEVEL_HEADINGS.has(line.toUpperCase())) {
+      // In platters section the WHOLE 62.00 112.00 215.00 line is the platter totals.
+      // The TOP_LEVEL "WHOLE" alone (header) we skip; but the next line will be the totals.
+      if (current.section === PLATTER_SECTION && line.toUpperCase() === 'WHOLE') {
+        platterCollectingTiers = false; // tier labels done, totals come next
+      }
+      continue;
+    }
     if (isJunk(line)) continue;
+
+    // ============ PLATTER SECTION HANDLING ============
+    if (current.section === PLATTER_SECTION) {
+      // Collect tier labels: "THE GRAND" / "THE DELUXE" / "THE KING"
+      const tierMatch = line.match(PLATTER_TIER_RE);
+      if (tierMatch) {
+        platterTierLabels.push(tierMatch[1].toUpperCase());
+        continue;
+      }
+      // "serves 1-2" annotation — skip
+      if (PLATTER_SERVES_RE.test(line)) continue;
+
+      // Platter totals line: 3 prices on one line, e.g. "62.00 112.00 215.00"
+      if (!platterTotalsCaptured) {
+        const totalsTokens = line.split(/\s+/);
+        const allPrices = totalsTokens.every((t) => /^\$?\d+(?:\.\d{2})?$/.test(t));
+        if (allPrices && totalsTokens.length === 3 && platterTierLabels.length === 3) {
+          current.platterTiers = totalsTokens.map((p, i) => ({
+            label: platterTierLabels[i],
+            price: Number(p.replace(/\$/g, ''))
+          }));
+          platterTotalsCaptured = true;
+          continue;
+        }
+      }
+
+      // Item row with glued piece counts at the end. Examples:
+      //   "KUMAMOTO 246"
+      //   "WILD JUMBO WHITE SHRIMP mexico 4714"
+      // Strategy: take the last token; if it's a glued-digit run, split into 3 counts.
+      const tokens = line.split(/\s+/);
+      const last = tokens[tokens.length - 1];
+      if (/^\d{3,6}$/.test(last)) {
+        const counts = splitGluedCounts(last);
+        if (counts) {
+          const itemName = tokens.slice(0, -1).join(' ').trim();
+          current.items.push({
+            name: itemName,
+            pieceCounts: counts,
+            description: `pieces per platter: ${platterTierLabels[0] || 'Grand'} ${counts[0]}, ${platterTierLabels[1] || 'Deluxe'} ${counts[1]}, ${platterTierLabels[2] || 'King'} ${counts[2]}`
+          });
+          continue;
+        }
+      }
+      // 3 separate price tokens on one line, e.g. "WHOLE 62.00 112.00 215.00" wasn't caught above
+      // Or a normal item with a single trailing price
+      if (looksLikeNewItem(line)) {
+        current.items.push(parseItem(line));
+        continue;
+      }
+      // Continuation (lowercase-led description like " pistachio, citrus pesto")
+      if (!looksLikeNewItem(line) && current.items.length > 0) {
+        const prev = current.items[current.items.length - 1];
+        prev.description = prev.description ? `${prev.description} ${line}`.trim() : line;
+        continue;
+      }
+      continue;
+    }
+    // ============ END PLATTER HANDLING ============
 
     const inSteakSection = STEAK_SECTION_RE.test(current.section);
 
-    // STEAK HANDLING (inside steak/wagyu sections)
     if (inSteakSection) {
-      // Case A: parent line by itself, e.g. "FILET MIGNON" or "NEW YORK STEAK"
       if (STEAK_PARENT_RE.test(line)) {
         lastSteakParent = line.toUpperCase();
         continue;
       }
-      // Case B: multi-size shared price line, e.g.
-      //   "3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*  105"
       const multi = line.match(MULTI_SIZE_LINE_RE);
       if (multi && lastSteakParent) {
         const sizesPart = multi[1];
@@ -185,13 +305,11 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
         for (let i = 0; i < sizes.length; i++) {
           current.items.push({
             name: `${lastSteakParent} — ${sizes[i]}`,
-            // Only attach price to first variant — the price is shared/flight pricing
             price: i === 0 ? price : undefined
           });
         }
         continue;
       }
-      // Case C: single size+price line, e.g. "6oz Petite Cut* 58"
       const sp = line.match(SIZE_PRICE_LINE_RE);
       if (sp && lastSteakParent) {
         const size = sp[1].trim();
@@ -202,11 +320,16 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
         });
         continue;
       }
-      // Case D: standalone item with size baked into description (e.g. "PRIME RIBEYE" then "16oz Ribeye Steak*  72")
-      // Falls through to the generic continuation/new-item logic below.
     }
 
-    // Parenthetical-led continuation: "(MSC certified) ..."
+    // Section-level note: line starts with "served with" or "with " right after section header
+    // and current section has no items yet.
+    if (current.items.length === 0 && /^(served with|with |topped with)\b/i.test(line)) {
+      current.notes = current.notes ? `${current.notes} ${line}` : line;
+      continue;
+    }
+
+    // Parenthetical-led continuation
     if (/^\(/.test(line) && current.items.length > 0) {
       const prev = current.items[current.items.length - 1];
       const priceMatch = line.match(PRICE_RE);
@@ -229,8 +352,6 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       continue;
     }
 
-    // New item — reset steak parent tracker so the next standalone item doesn't
-    // accidentally inherit a stale parent name.
     if (inSteakSection && !STEAK_PARENT_RE.test(line)) {
       lastSteakParent = null;
     }
@@ -239,33 +360,29 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
 
   flushCurrent();
 
-  // Drop promo/marketing sections entirely (or keep them but flag — here we drop items but keep section)
+  // Drop promo sections to only real dishes
   for (const section of sections) {
     if (PROMO_SECTIONS.has(section.section)) {
       section.items = section.items.filter((it) =>
-        // Only keep items that look like actual dishes (UPPER CASE name, has a normal price)
         /^[A-Z]/.test(it.name) && it.name.length < 80 && it.price && Number(it.price) < 500
       );
     }
   }
 
-  // Legacy steak-size expansion (still useful for items where sizes ended up in description)
+  // Legacy steak-size expansion (for items where sizes ended up in description)
   for (const section of sections) {
     if (!STEAK_SECTION_RE.test(section.section)) continue;
     const expanded: MenuItem[] = [];
     for (const item of section.items) {
-      // Look for size variants in BOTH name and description
       const haystack = `${item.name} ${item.description ?? ''}`;
       const sizeMatches = [...haystack.matchAll(STEAK_SIZE_RE)].map((m) => m[1].trim());
 
       if (sizeMatches.length >= 2) {
-        // Compute a clean base name = original name with size tokens stripped
         let baseName = item.name;
         for (const sz of sizeMatches) baseName = baseName.replace(sz, '').trim();
         baseName = baseName.replace(/\s{2,}/g, ' ').replace(/[—\-]\s*$/, '').trim();
         if (!baseName) baseName = item.name.split(/\s+/).slice(0, 2).join(' ');
 
-        // Collect all candidate prices from priceTiers (preferred) or single price
         const prices: (string | undefined)[] = [];
         if (item.priceTiers && item.priceTiers.length > 0) {
           for (const t of item.priceTiers) prices.push(String(t.price));
@@ -286,13 +403,16 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     section.items = expanded;
   }
 
-  // Global dedup: merge same-named sections regardless of position (page-break splits)
+  // Global dedup: merge same-named sections
   const merged: MenuSection[] = [];
   const indexByName = new Map<string, number>();
   for (const sec of sections) {
     const key = sec.section.trim().toUpperCase();
     if (indexByName.has(key)) {
-      merged[indexByName.get(key)!].items.push(...sec.items);
+      const idx = indexByName.get(key)!;
+      merged[idx].items.push(...sec.items);
+      if (sec.notes) merged[idx].notes = merged[idx].notes ? `${merged[idx].notes} ${sec.notes}` : sec.notes;
+      if (sec.platterTiers && !merged[idx].platterTiers) merged[idx].platterTiers = sec.platterTiers;
     } else {
       indexByName.set(key, merged.length);
       merged.push(sec);
@@ -349,8 +469,7 @@ function toTableSommDishes(parsed: ParsedMenu): TableSommDish[] {
       if (!name || name.length < 3) continue;
       if (/^(menu|dinner|lunch|brunch|pacific|eastern)$/i.test(name)) continue;
       if (/^::.+::$/.test(name)) continue;
-      // Skip section-note lines (no price, very long, sentence-like)
-      if (!item.price && name.length > 60 && /\s[a-z]/.test(name)) continue;
+      if (!item.price && !item.pieceCounts && name.length > 60 && /\s[a-z]/.test(name)) continue;
 
       const combined = `${name} ${item.description ?? ''}`.trim();
       const protein = inferProtein(combined);
@@ -370,6 +489,7 @@ function toTableSommDishes(parsed: ParsedMenu): TableSommDish[] {
         section: section.section
       };
       if (item.priceTiers) dish.priceTiers = item.priceTiers;
+      if (item.pieceCounts) dish.pieceCounts = item.pieceCounts;
       dishes.push(dish);
     }
   }
