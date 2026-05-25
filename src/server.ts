@@ -196,25 +196,29 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     if (!STEAK_SECTIONS.test(section.section)) continue;
     const expanded: MenuItem[] = [];
     for (const item of section.items) {
-      const desc = item.description ?? '';
-      const sizeMatches = [...desc.matchAll(STEAK_SIZE_RE)].map((m) => m[1].trim());
+      // Look for size variants in BOTH name and description
+      const haystack = `${item.name} ${item.description ?? ''}`;
+      const sizeMatches = [...haystack.matchAll(STEAK_SIZE_RE)].map((m) => m[1].trim());
 
       if (sizeMatches.length >= 2) {
-        // Try priceTiers first
-        if (item.priceTiers && item.priceTiers.length === sizeMatches.length) {
-          for (let i = 0; i < sizeMatches.length; i++) {
-            expanded.push({
-              name: `${item.name} — ${sizeMatches[i]}`,
-              price: String(item.priceTiers[i].price)
-            });
-          }
-          continue;
+        // Compute a clean base name = original name with size tokens stripped
+        let baseName = item.name;
+        for (const sz of sizeMatches) baseName = baseName.replace(sz, '').trim();
+        baseName = baseName.replace(/\s{2,}/g, ' ').replace(/[—\-]\s*$/, '').trim();
+        if (!baseName) baseName = item.name.split(/\s+/).slice(0, 2).join(' ');
+
+        // Collect all candidate prices from priceTiers (preferred) or single price
+        const prices: (string | undefined)[] = [];
+        if (item.priceTiers && item.priceTiers.length > 0) {
+          for (const t of item.priceTiers) prices.push(String(t.price));
+        } else if (item.price) {
+          prices.push(item.price);
         }
-        // No priceTiers — single price + multiple sizes. Keep base, but split sizes into separate items with no price.
+
         for (let i = 0; i < sizeMatches.length; i++) {
           expanded.push({
-            name: `${item.name} — ${sizeMatches[i]}`,
-            price: i === 0 ? item.price : undefined
+            name: `${baseName} — ${sizeMatches[i]}`,
+            price: prices[i] ?? undefined
           });
         }
         continue;
@@ -224,7 +228,20 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     section.items = expanded;
   }
 
-  return { sourceFile, extractedAt: new Date().toISOString(), sections };
+  // Global dedup: merge same-named sections regardless of position (page-break splits)
+  const merged: MenuSection[] = [];
+  const indexByName = new Map<string, number>();
+  for (const sec of sections) {
+    const key = sec.section.trim().toUpperCase();
+    if (indexByName.has(key)) {
+      merged[indexByName.get(key)!].items.push(...sec.items);
+    } else {
+      indexByName.set(key, merged.length);
+      merged.push(sec);
+    }
+  }
+
+  return { sourceFile, extractedAt: new Date().toISOString(), sections: merged };
 }
 
 function slugify(value: string): string {
@@ -247,98 +264,4 @@ function inferStyle(text: string): string {
   if (/(light|citrus|crudo|vinaigrette|fresh)/.test(t)) return 'light';
   if (/(bold|smoked|rosemary|pepper|spiced|harissa|curry|chili|jalape)/.test(t)) return 'bold';
   if (/(mango|papaya|pineapple|berry|strawberry|grapefruit|passion fruit|elderflower)/.test(t)) return 'fruit';
-  return 'classic';
-}
-
-function inferCategory(section: string, itemName: string, protein: string): string {
-  const t = `${section} ${itemName}`.toLowerCase();
-  if (protein === 'n/a' || /(cocktail|spirit free|wine|beer|bartender)/.test(t)) return 'drink';
-  if (/(dessert|sorbet|cake|ice cream|panna cotta)/.test(t)) return 'dessert';
-  if (/(side)/.test(t)) return 'side';
-  if (/(salad|appetizer|sushi|raw bar|shellfish|chilled|tartare|poke|nachos|roll|platter)/.test(t)) return 'starter';
-  return 'main';
-}
-
-function toNumber(price?: string): number | null {
-  if (!price) return null;
-  const first = price.split('/')[0].trim();
-  const n = Number(first.replace(/\$/g, ''));
-  return Number.isFinite(n) ? n : null;
-}
-
-function toTableSommDishes(parsed: ParsedMenu): TableSommDish[] {
-  const dishes: TableSommDish[] = [];
-  for (const section of parsed.sections) {
-    for (const item of section.items) {
-      const name = item.name.trim();
-      if (!name || name.length < 3) continue;
-      if (/^(menu|dinner|lunch|brunch|pacific|eastern)$/i.test(name)) continue;
-      if (/^::.+::$/.test(name)) continue;
-      // Skip section-note lines (no price, very long, sentence-like)
-      if (!item.price && name.length > 60 && /\s[a-z]/.test(name)) continue;
-
-      const combined = `${name} ${item.description ?? ''}`.trim();
-      const protein = inferProtein(combined);
-      const style = inferStyle(combined);
-
-      const dish: TableSommDish = {
-        id: slugify(`${section.section}-${name}`) || `dish-${dishes.length + 1}`,
-        name,
-        category: inferCategory(section.section, combined, protein),
-        protein,
-        style,
-        price: toNumber(item.price),
-        tags: [section.section.toLowerCase(), protein, style].filter(
-          (v, i, a) => v && v !== 'unknown' && a.indexOf(v) === i
-        ),
-        notes: item.description ?? '',
-        section: section.section
-      };
-      if (item.priceTiers) dish.priceTiers = item.priceTiers;
-      dishes.push(dish);
-    }
-  }
-  return dishes;
-}
-
-const app = express();
-app.use(cors({ origin: true }));
-app.use(express.json({ limit: '1mb' }));
-
-app.get('/', (_req, res) => {
-  res.json({
-    ok: true,
-    service: 'tablesomm-menu-parser-api',
-    endpoints: ['GET /health', 'POST /parse-menu (multipart, field=file)']
-  });
-});
-
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'tablesomm-menu-parser-api' });
-});
-
-app.post('/parse-menu', upload.single('file'), async (req, res) => {
-  try {
-    const file = req.file;
-    if (!file) {
-      return res.status(400).json({ error: 'Missing file upload. Use form field name "file".' });
-    }
-    if (!/\.pdf$/i.test(file.originalname) && file.mimetype !== 'application/pdf') {
-      return res.status(400).json({ error: 'Only PDF files are supported.' });
-    }
-
-    const result = await pdf(file.buffer);
-    const parsed = parseMenuText(result.text, file.originalname);
-    const dishes = toTableSommDishes(parsed);
-
-    res.json({ parsed, dishes, count: dishes.length });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown parse error';
-    res.status(500).json({ error: message });
-  }
-});
-
-const port = Number(process.env.PORT || 3000);
-app.listen(port, () => {
-  console.log(`tablesomm-menu-parser-api listening on ${port}`);
-});
+  return '
