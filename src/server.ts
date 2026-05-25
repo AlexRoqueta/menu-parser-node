@@ -3,7 +3,13 @@ import cors from 'cors';
 import multer from 'multer';
 import pdf from 'pdf-parse';
 
-type MenuItem = { name: string; description?: string; price?: string };
+type PriceTier = { label?: string; price: number };
+type MenuItem = {
+  name: string;
+  description?: string;
+  price?: string;
+  priceTiers?: PriceTier[];
+};
 type MenuSection = { section: string; items: MenuItem[] };
 type ParsedMenu = { sourceFile: string; extractedAt: string; sections: MenuSection[] };
 type TableSommDish = {
@@ -13,27 +19,34 @@ type TableSommDish = {
   protein: string;
   style: string;
   price: number | null;
+  priceTiers?: PriceTier[];
   tags: string[];
   notes: string;
   section: string;
 };
 
-// Real section headers in this menu are wrapped in "::" markers, e.g. ":: APPETIZERS ::"
 const SECTION_RE = /^::\s*(.+?)\s*::$/;
-// Headings like "MENU", "Dinner", "Pacific", "Eastern" — top-level page labels
 const TOP_LEVEL_HEADINGS = new Set([
   'MENU', 'DINNER', 'LUNCH', 'BRUNCH', 'PACIFIC', 'EASTERN',
-  'OYSTER SAMPLER', 'HALFWHOLE', 'WHOLE'
+  'OYSTER SAMPLER', 'HALFWHOLE', 'WHOLE', 'EACH', '½ DOZEN', '1 DOZEN',
+  'EACH½ DOZEN1 DOZEN', 'EACH½ POUND1 POUND'
 ]);
-// A dish "name" line is usually ALL CAPS (often with leader dots after it).
-// We use this to detect new items vs continuation lines.
-const ITEM_HEADING_RE = /^[A-Z0-9][A-Z0-9\s&/'"\-\.()*]*[A-Z0-9*)]\.{0,}\s*\$?\d*(?:\.\d+)?$/;
-// Pull a trailing price off a line.
+// Section-like names that often appear inline (no :: markers) — promote them
+const INLINE_SECTION_NAMES = new Set([
+  'ICED SHELLFISH PLATTERS', 'WHOLE FISH', 'ENTREES', 'USDA PRIME STEAKS',
+  'WAGYU GOLD', 'SIDES', 'CRUSTACEANS', 'SALADS & SANDWICHES'
+]);
+
 const PRICE_RE = /(\$?\d+(?:\.\d{2})?)\s*$/;
-// Leader dots: ".........." used as visual fillers between name and price
 const LEADER_DOTS_RE = /\.{3,}/g;
-// Lines that are just noise
-const JUNK_RE = /^(?:\*+|[½¼¾]+|th|nd|rd|st|EACH½ DOZEN1 DOZEN|EACH½ POUND1 POUND|[\s\W]+)$/i;
+// Splits glued price columns like "3.9022.4043.80" → ["3.90","22.40","43.80"]
+const GLUED_PRICES_RE = /(\d+\.\d{2})(?=\d)/g;
+// Date stub like "Monday, May" / "Monday, May 18th"
+const DATE_STUB_RE = /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+\w+(?:\s+\d+(?:st|nd|rd|th)?)?\b/g;
+// Steak size: "6oz Petite Cut*" or "8oz Center Cut*" or "12oz Thick Cut NY Strip*"
+const STEAK_SIZE_RE = /(\d+oz\s+[^*]+?\*)/g;
+// Junk patterns
+const JUNK_RE = /^(?:\*+|[½¼¾]+|th|nd|rd|st|EACH½ DOZEN1 DOZEN|EACH½ POUND1 POUND|HALFWHOLE|½WHOLE|½½WHOLE|[\s\W]+)$/i;
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -44,8 +57,12 @@ function normalizeLines(text: string): string[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
-    // Replace leader dots with a space so prices/columns aren't glued together
+    // Strip date stubs like "Monday, May 18th"
+    .map((line) => line.replace(DATE_STUB_RE, '').trim())
+    // Replace leader dots with a space
     .map((line) => line.replace(LEADER_DOTS_RE, ' ').replace(/\s+/g, ' ').trim())
+    // Separate glued price columns
+    .map((line) => line.replace(GLUED_PRICES_RE, '$1 ').replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 }
 
@@ -60,30 +77,26 @@ function extractSectionName(line: string): string {
 
 function isJunk(line: string): boolean {
   if (JUNK_RE.test(line)) return true;
-  // Lone single character or just punctuation
   if (line.replace(/[^a-z0-9]/gi, '').length < 2) return true;
-  // Footnote / disclaimer
   if (/consuming raw or undercooked/i.test(line)) return true;
-  // Staff credits (treated as junk for now — could be captured separately)
-  if (/^(general manager|executive chef|chef de cuisine|sous chef|owner)\b/i.test(line)) return true;
+  if (/^(general manager|executive chef|chef de cuisine|sous chef|owner|head chef)\b/i.test(line)) return true;
+  if (/^first of season!?$/i.test(line)) return true;
+  // Ranch/farm location subheaders (e.g. "DOUBLE R RANCH · LOOMIS, WASHINGTON")
+  if (/^[A-Z][A-Z\s&]+(?:RANCH|FARMS?|RANCHES)\b.*·/i.test(line)) return true;
+  if (/^SNAKE RIVER FARMS\b/i.test(line)) return true;
   return false;
 }
 
 function looksLikeNewItem(line: string): boolean {
-  // Heuristic: line starts with multiple uppercase letters AND is mostly uppercase
   const firstTokenMatch = line.match(/^[A-Z0-9'"&\-\.()*]+(?:\s+[A-Z0-9'"&\-\.()*]+)*/);
   if (!firstTokenMatch) return false;
   const heading = firstTokenMatch[0];
-  // Must have at least 2 uppercase letters
   const upperCount = (heading.match(/[A-Z]/g) || []).length;
   if (upperCount < 2) return false;
-  // The heading should make up most of the start of the line (i.e., before any lowercase words)
   return heading.length >= Math.min(line.length, 4);
 }
 
 function splitMultiPriceLine(line: string): { name: string; prices: string[] } {
-  // After leader-dot stripping we may have e.g. "JAMES RIVER (...) 3.90 22.40 43.80"
-  // Capture all trailing price-like tokens.
   const tokens = line.split(/\s+/);
   const prices: string[] = [];
   while (tokens.length > 0) {
@@ -100,14 +113,13 @@ function splitMultiPriceLine(line: string): { name: string; prices: string[] } {
 
 function parseItem(line: string): MenuItem {
   const { name, prices } = splitMultiPriceLine(line);
-  if (prices.length === 0) {
-    return { name: line };
-  }
-  if (prices.length === 1) {
-    return { name, price: prices[0] };
-  }
-  // Multiple columns (e.g. each / half-dozen / dozen) — keep all in the price field
-  return { name, price: prices.join(' / ') };
+  if (prices.length === 0) return { name: line };
+  if (prices.length === 1) return { name, price: prices[0] };
+  // Multi-column → store all
+  const numericTiers: PriceTier[] = prices.map((p) => ({
+    price: Number(p.replace(/\$/g, ''))
+  }));
+  return { name, price: prices[0], priceTiers: numericTiers };
 }
 
 function parseMenuText(text: string, sourceFile: string): ParsedMenu {
@@ -115,25 +127,40 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
   const sections: MenuSection[] = [];
   let current: MenuSection = { section: 'MENU', items: [] };
 
+  function flushCurrent() {
+    if (current.items.length > 0 || current.section !== 'MENU') {
+      // Merge with previous section if same name
+      const prev = sections[sections.length - 1];
+      if (prev && prev.section === current.section) {
+        prev.items.push(...current.items);
+      } else {
+        sections.push(current);
+      }
+    }
+  }
+
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
 
-    // Section header (":: TEXT ::")
+    // Explicit "::" section header
     if (isSection(line)) {
-      if (current.items.length > 0 || current.section !== 'MENU') {
-        sections.push(current);
-      }
+      flushCurrent();
       current = { section: extractSectionName(line), items: [] };
       continue;
     }
 
-    // Top-level page heading (MENU, Dinner, etc.) — ignore, don't add as item
-    if (TOP_LEVEL_HEADINGS.has(line.toUpperCase())) continue;
+    // Inline section names without :: markers
+    if (INLINE_SECTION_NAMES.has(line.toUpperCase())) {
+      flushCurrent();
+      current = { section: line.toUpperCase(), items: [] };
+      continue;
+    }
 
+    if (TOP_LEVEL_HEADINGS.has(line.toUpperCase())) continue;
     if (isJunk(line)) continue;
 
-    // Continuation line: no leading uppercase heading → append to previous item
+    // Continuation line → append to previous item
     if (!looksLikeNewItem(line) && current.items.length > 0) {
       const prev = current.items[current.items.length - 1];
       const priceMatch = line.match(PRICE_RE);
@@ -141,17 +168,43 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       prev.description = prev.description
         ? `${prev.description} ${textPart}`.trim()
         : textPart;
-      if (priceMatch && !prev.price) {
-        prev.price = priceMatch[1];
-      }
+      if (priceMatch && !prev.price) prev.price = priceMatch[1];
+      continue;
+    }
+
+    // Special case: parenthetical line like "(MSC certified)" → merge into previous
+    if (/^\(.+\)$/.test(line.split(' ')[0]) && current.items.length > 0) {
+      const prev = current.items[current.items.length - 1];
+      prev.description = prev.description ? `${prev.description} ${line}` : line;
       continue;
     }
 
     current.items.push(parseItem(line));
   }
 
-  if (current.items.length > 0 || sections.length === 0) {
-    sections.push(current);
+  flushCurrent();
+
+  // Post-process: expand steak-size variants
+  for (const section of sections) {
+    const expanded: MenuItem[] = [];
+    for (const item of section.items) {
+      const desc = item.description ?? '';
+      const sizeMatches = [...desc.matchAll(STEAK_SIZE_RE)];
+      if (sizeMatches.length >= 2 && item.priceTiers && item.priceTiers.length === sizeMatches.length) {
+        for (let i = 0; i < sizeMatches.length; i++) {
+          expanded.push({
+            name: `${item.name} — ${sizeMatches[i][1].trim()}`,
+            price: String(item.priceTiers[i].price)
+          });
+        }
+      } else if (sizeMatches.length >= 2 && item.price) {
+        // Only one price collected but multiple sizes in desc — keep base item
+        expanded.push(item);
+      } else {
+        expanded.push(item);
+      }
+    }
+    section.items = expanded;
   }
 
   return { sourceFile, extractedAt: new Date().toISOString(), sections };
@@ -163,7 +216,7 @@ function slugify(value: string): string {
 
 function inferProtein(text: string): string {
   const t = text.toLowerCase();
-  if (/(tuna|salmon|halibut|cod|bass|swordfish|lobster|shrimp|crab|scallop|mussel|clam|oyster|octopus|urchin|sablefish|seafood|fish|cioppino|poke|hamachi|sashimi|sushi|prawn)/.test(t)) return 'seafood';
+  if (/(tuna|salmon|halibut|cod|bass|swordfish|lobster|shrimp|crab|scallop|mussel|clam|oyster|octopus|urchin|sablefish|seafood|fish|cioppino|poke|hamachi|sashimi|sushi|prawn|calamari|anchovy|toro)/.test(t)) return 'seafood';
   if (/(chicken|duck|turkey|poultry)/.test(t)) return 'chicken';
   if (/(beef|steak|filet|ribeye|wagyu|burger|mignon|ny strip|new york strip|porterhouse|t-bone)/.test(t)) return 'beef';
   if (/(pork|ham|bacon|chorizo|prosciutto|pancetta)/.test(t)) return 'pork';
@@ -184,14 +237,13 @@ function inferCategory(section: string, itemName: string, protein: string): stri
   const t = `${section} ${itemName}`.toLowerCase();
   if (protein === 'n/a' || /(cocktail|spirit free|wine|beer|bartender)/.test(t)) return 'drink';
   if (/(dessert|sorbet|cake|ice cream|panna cotta)/.test(t)) return 'dessert';
-  if (/(salad|side|appetizer|sushi|raw bar|shellfish|chilled|tartare|poke|nachos|roll)/.test(t)) return 'starter';
-  if (/(steak|usda prime|wagyu|entree|whole fish)/.test(t)) return 'main';
+  if (/(side)/.test(t)) return 'side';
+  if (/(salad|appetizer|sushi|raw bar|shellfish|chilled|tartare|poke|nachos|roll|platter)/.test(t)) return 'starter';
   return 'main';
 }
 
 function toNumber(price?: string): number | null {
   if (!price) return null;
-  // For multi-column prices ("3.90 / 22.40 / 43.80") take the first
   const first = price.split('/')[0].trim();
   const n = Number(first.replace(/\$/g, ''));
   return Number.isFinite(n) ? n : null;
@@ -204,14 +256,13 @@ function toTableSommDishes(parsed: ParsedMenu): TableSommDish[] {
       const name = item.name.trim();
       if (!name || name.length < 3) continue;
       if (/^(menu|dinner|lunch|brunch|pacific|eastern)$/i.test(name)) continue;
-      // Skip section-marker stragglers
       if (/^::.+::$/.test(name)) continue;
 
       const combined = `${name} ${item.description ?? ''}`.trim();
       const protein = inferProtein(combined);
       const style = inferStyle(combined);
 
-      dishes.push({
+      const dish: TableSommDish = {
         id: slugify(`${section.section}-${name}`) || `dish-${dishes.length + 1}`,
         name,
         category: inferCategory(section.section, combined, protein),
@@ -223,7 +274,9 @@ function toTableSommDishes(parsed: ParsedMenu): TableSommDish[] {
         ),
         notes: item.description ?? '',
         section: section.section
-      });
+      };
+      if (item.priceTiers) dish.priceTiers = item.priceTiers;
+      dishes.push(dish);
     }
   }
   return dishes;
