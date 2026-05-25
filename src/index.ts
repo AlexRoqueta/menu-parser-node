@@ -19,85 +19,234 @@ type ParsedMenu = {
   sections: MenuSection[];
 };
 
-const DECORATIVE_SECTION_RE = /^::\s*(.+?)\s*::$/;
-const MONEY_AT_END_RE =
-  /\b(\d+\.\d{2}|\d+\/(?:POUND|LB|DOZEN)|\d+\/(?:½|¾)?\s*POUND(?:S)?)\s*$/i;
-const SPACED_MONEY_AT_END_RE = /\b(\d{1,3})\s+(\d{2})\s*$/;
-const SIMPLE_PRICE_AT_END_RE = /\b(\d{1,3})\s*$/;
+const MONEY_ONLY_RE = /^(?:US\$?\s*)?(\d+(?:\.\d{2})?)$/i;
+const EMBEDDED_MONEY_RE = /\b(?:US\$?\s*)?(\d+(?:\.\d{2})?)\s*$/i;
+const LEADING_COUNT_RE = /^\(?\d+\)?\s+/;
+const PAGE_MARKER_RE = /^\*\*page-\d+\*\*$/i;
 
-// Exclude these sections from meal importing
-const SKIP_SECTION_RE =
-  /^(RAW BAR\*?|SPIRIT FREE|COCKTAILS|BARTENDER'S SPECIAL|APPETIZERS|SIDES)$/i;
+const SECTION_HEADER_HINTS = [
+  'food - ',
+  'lunch menu - ',
+  'drinks - ',
+  'drinks special - ',
+  'kids - ',
+  'candy - ',
+  'favorite new dishes - ',
+  'platos especial - ',
+  'todays special - ',
+  'today special - '
+];
 
-// Only these sections may emit meal items
-const ALLOWED_MEAL_SECTIONS = new Set<string>([
-  'SUSHI',
-  'SALADS & SANDWICHES',
-  'CRUSTACEANS',
-  'CHILLED SHELLFISH',
-  'ICED SHELLFISH PLATTERS',
-  'ENTREES',
-  'USDA PRIME STEAKS',
-  'WAGYU GOLD',
-  'FIRST OF SEASON: WILD PACIFIC HALIBUT'
-]);
+const SECTION_STOPWORDS = [
+  'menu static',
+  'prices subject to change',
+  'menustatic.com',
+  'signature dishes',
+  'informations',
+  'opening times',
+  'address:',
+  'phone:'
+];
 
-const KNOWN_PRICES: Record<string, string> = {
-  'WILD PACIFIC BIGEYE TUNA POKE': '25',
-  'HONEYMOON OYSTER': '15',
-  'SMOKED HAMACHI NACHOS': '22',
-  'KING SALMON ROLL': '24',
-  'TROJAN ROLL': '25',
-  'BLUEFIN TORO TARTARE': '28',
-  'SPICY LOBSTER ROLL': '35',
-  'WILD PACIFIC BIGEYE TUNA': '46',
-  'WILD MEXICAN SWORDFISH': '44',
-  'FARMED NEW ZEALAND KING SALMON': '46',
-  'WILD ALASKAN BLACK COD (SABLEFISH)': '48'
-};
+const EXCLUDED_SECTION_PATTERNS: RegExp[] = [
+  /\bdrink/i,
+  /\bsoft drinks?\b/i,
+  /\bcocktail/i,
+  /\bbeer\b/i,
+  /\bwine\b/i,
+  /\bmargarita\b/i,
+  /\bappetizer/i,
+  /\bdips?\b/i,
+  /\bsides?\b/i,
+  /\bdessert/i,
+  /\bcandy\b/i,
+  /\bkids?\b/i,
+  /\ba la carte\b/i,
+  /\bsalad/i,
+  /\bnachos?\b/i,
+  /\b1\/2 nachos?\b/i,
+  /\braw bar\b/i,
+  /\bshellfish\b/i,
+  /\boyster/i,
+  /\bsushi\b/i,
+  /\bspirit free\b/i,
+  /\bcocktails?\b/i,
+  /\bbartender/i,
+  /\bice[sd] shellfish/i
+];
 
-const MOJIBAKE_REPLACEMENTS: Array<[RegExp, string]> = [
-  [/Ã±/g, 'ñ'],
-  [/Ã§/g, 'ç'],
-  [/Ã©/g, 'é'],
-  [/Ã¨/g, 'è'],
-  [/Ã­/g, 'í'],
-  [/Ã³/g, 'ó'],
-  [/Ã¼/g, 'ü'],
-  [/Ã‰/g, 'É'],
-  [/Ã¡/g, 'á'],
-  [/Â½/g, '½'],
-  [/Â¾/g, '¾'],
-  [/1Â½/g, '1½'],
-  [/Â·/g, '·'],
-  [/Â/g, '']
+const INCLUDED_SECTION_PATTERNS: RegExp[] = [
+  /\bentrees?\b/i,
+  /\bfajitas?\b/i,
+  /\bburritos?\b/i,
+  /\btacos?\b/i,
+  /\bsteak\b/i,
+  /\bseafood\b/i,
+  /\bchicken\b/i,
+  /\bpork\b/i,
+  /\bvegetarian/i,
+  /\bcombinations?\b/i,
+  /\bantojitos?\b/i,
+  /\bon the grill\b/i,
+  /\bgrill\b/i,
+  /\bfavorite new dishes\b/i,
+  /\bplatos? especial/i,
+  /\btoday'?s special/i,
+  /\blunch specialt/i,
+  /\bexpress lunch\b/i
+];
+
+const NEGATIVE_ITEM_PATTERNS: RegExp[] = [
+  /\bdrink\b/i,
+  /\btea\b/i,
+  /\bcoke\b/i,
+  /\bsprite\b/i,
+  /\blemonade\b/i,
+  /\bcoffee\b/i,
+  /\bmilk\b/i,
+  /\bjuice\b/i,
+  /\bwater\b/i,
+  /\bsoda\b/i,
+  /\bmilkshake/i,
+  /\bmichelada\b/i,
+  /\bmargarita\b/i,
+  /\bvirgin\b/i,
+  /\bbeer\b/i,
+  /\bwine\b/i,
+  /\bappetizer/i,
+  /\bsampler\b/i,
+  /\bwings?\b/i,
+  /\bsoup\b/i,
+  /\bdip\b/i,
+  /\bsalsa\b/i,
+  /\bchips?\b/i,
+  /\bguacamole\b/i,
+  /\bqueso\b/i,
+  /\bside\b/i,
+  /\bfries\b/i,
+  /\brace\b/i,
+  /\bbeans?\b/i,
+  /\btortillas?\b/i,
+  /\bsour cream\b/i,
+  /\blettuce\b/i,
+  /\btomato\b/i,
+  /\bavocado\b/i,
+  /\bjalape/i,
+  /\bonions?\b/i,
+  /\blemon\b/i,
+  /\blime\b/i,
+  /\bbroccoli\b/i,
+  /\bcoleslaw\b/i,
+  /\bspinach\b/i,
+  /\bmushrooms?\b/i,
+  /\bpineapple\b/i,
+  /\bchorizo\b/i,
+  /\bcandy\b/i,
+  /\bice cream\b/i,
+  /\bflan\b/i,
+  /\bchurros?\b/i,
+  /\bfunnel cake\b/i,
+  /\bsopapilla\b/i,
+  /\bxango\b/i,
+  /\bkids?\b/i,
+  /\bhot dog\b/i,
+  /\bhotdog\b/i,
+  /\bpizza bites\b/i,
+  /\bmini corn dogs\b/i,
+  /\bmac cheese\b/i,
+  /\ba la carte\b/i,
+  /\bcarta\b/i,
+  /\bcarte\b/i,
+  /\bsolo\b/i,
+  /\bsmall\b/i,
+  /\b1\/2\b/i,
+  /^\(?\d+\)?\s*(taco|enchilada|burrito|quesadilla|tamale|chalupa|tostada)\b/i,
+  /^#?\d+\s*$/i
+];
+
+const POSITIVE_ITEM_PATTERNS: RegExp[] = [
+  /\bentree\b/i,
+  /\bdinner\b/i,
+  /\bfajitas?\b/i,
+  /\bburritos?\b/i,
+  /\bchimichanga\b/i,
+  /\benchiladas?\b/i,
+  /\bquesadilla rellena\b/i,
+  /\bgrande quesadilla\b/i,
+  /\bquesadilla grande\b/i,
+  /\bpollo\b/i,
+  /\bchicken\b/i,
+  /\bsteak\b/i,
+  /\bsirloin\b/i,
+  /\bribeye\b/i,
+  /\bt[- ]?bone\b/i,
+  /\bcarne asada\b/i,
+  /\bparrillada\b/i,
+  /\balambre\b/i,
+  /\bmolcajete\b/i,
+  /\bmorcajete\b/i,
+  /\bmar & tierra\b/i,
+  /\bseafood combo\b/i,
+  /\bshrimp\b/i,
+  /\bfilet\b/i,
+  /\bmojjarra\b/i,
+  /\btilapia\b/i,
+  /\bcarnitas\b/i,
+  /\bchuletas?\b/i,
+  /\bchile verde\b/i,
+  /\bchile rojo\b/i,
+  /\bchile colorado\b/i,
+  /\bguiso\b/i,
+  /\btampiqueno\b/i,
+  /\bdeluxe\b/i,
+  /\bspecial\b/i,
+  /\btorta\b/i,
+  /\btaquitos mexicanos\b/i,
+  /\bflautas mexicanas\b/i,
+  /\bchilaquiles\b/i,
+  /\bentomatadas\b/i,
+  /\bvegetarian\b/i,
+  /^\([A-E]\)\s+vegetarian$/i,
+  /^#\d+$/i
 ];
 
 function fixMojibake(value: string): string {
-  let result = value;
-  for (const [pattern, replacement] of MOJIBAKE_REPLACEMENTS) {
-    result = result.replace(pattern, replacement);
-  }
-  return result;
+  return value
+    .replace(/Ã±/g, 'ñ')
+    .replace(/Ã¡/g, 'á')
+    .replace(/Ã©/g, 'é')
+    .replace(/Ã­/g, 'í')
+    .replace(/Ã³/g, 'ó')
+    .replace(/Ãº/g, 'ú')
+    .replace(/Ã¼/g, 'ü')
+    .replace(/Â½/g, '½')
+    .replace(/Â¾/g, '¾')
+    .replace(/Â/g, '')
+    .replace(/â€“/g, '–')
+    .replace(/â€”/g, '—')
+    .replace(/â€˜/g, "'")
+    .replace(/â€™/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"');
 }
 
 function cleanText(text: string): string {
-  return fixMojibake(text).replace(/[ \t]+/g, ' ');
+  return fixMojibake(text)
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
 }
 
 function cleanField(text?: string): string | undefined {
   if (!text) return undefined;
 
-  const cleaned = fixMojibake(text)
-    .replace(
-      /3oz Ribeye\* · 3oz New York\* · 3oz Filet Mignon\*/g,
-      '3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*'
-    )
-    .replace(
-      /62\/¾ POUND 82\/POUND 122\/1½ POUNDS/g,
-      '62/¾ POUND · 82/POUND · 122/1½ POUNDS'
-    )
-    .replace(/150\/POUND 195\/1½ POUNDS/g, '150/POUND · 195/1½ POUNDS')
+  const cleaned = cleanText(text)
+    .replace(/^\*+\/?/, '')
+    .replace(/^,+\/?\.?/, '')
+    .replace(/\s+,/g, ',')
+    .replace(/\(\s+/g, '(')
+    .replace(/\s+\)/g, ')')
+    .replace(/\s*&\s*/g, ' & ')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -107,409 +256,265 @@ function cleanField(text?: string): string | undefined {
 function normalizeLines(text: string): string[] {
   return text
     .split(/\r?\n/)
-    .map((line) => cleanText(line).trim())
-    .filter(Boolean);
-}
-
-function isDecorativeSection(line: string): boolean {
-  return DECORATIVE_SECTION_RE.test(line);
-}
-
-function extractDecorativeSection(line: string): string {
-  const match = line.match(DECORATIVE_SECTION_RE);
-  return match ? match[1].trim() : line.trim();
-}
-
-function isKnownSection(line: string): boolean {
-  return [
-    'SPIRIT FREE',
-    'COCKTAILS',
-    "BARTENDER'S SPECIAL",
-    'APPETIZERS',
-    'SUSHI',
-    'SALADS & SANDWICHES',
-    'CRUSTACEANS',
-    'CHILLED SHELLFISH',
-    'ICED SHELLFISH PLATTERS',
-    'SIDES',
-    'ENTREES',
-    'USDA PRIME STEAKS',
-    'WAGYU GOLD',
-    'FIRST OF SEASON: WILD PACIFIC HALIBUT'
-  ].includes(line.trim());
+    .map((line) => cleanText(line))
+    .filter(Boolean)
+    .filter((line) => !PAGE_MARKER_RE.test(line));
 }
 
 function isNoise(line: string): boolean {
-  return (
-    !line ||
-    /^\*+$/.test(line) ||
-    /^[.\s]+$/.test(line) ||
-    /^\*Consuming raw or undercooked/i.test(line) ||
-    /^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?/i.test(line) ||
-    /^General Manager\b/i.test(line) ||
-    /^Executive Chef\b/i.test(line) ||
-    /^Dinner$/i.test(line) ||
-    /^Lunch$/i.test(line) ||
-    /^Brunch$/i.test(line) ||
-    /^EACH\b/i.test(line) ||
-    /^½ DOZEN\b/i.test(line) ||
-    /^1 DOZEN\b/i.test(line) ||
-    /^Eastern$/i.test(line) ||
-    /^Pacific$/i.test(line) ||
-    /^CHARCOAL GRILLED OR WHOLE CRISPY FRIED/i.test(line)
-  );
+  if (!line) return true;
+  if (SECTION_STOPWORDS.some((s) => line.toLowerCase().includes(s))) return true;
+  if (/^menu$/i.test(line)) return true;
+  if (/^opening times$/i.test(line)) return true;
+  if (/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/i.test(line)) return true;
+  if (/^\d{1,2}:\d{2}-\d{1,2}:\d{2}$/i.test(line)) return true;
+  if (/^\+?\d[\d\s\-()]{7,}$/.test(line)) return true;
+  if (/^\d+\s+\w/.test(line) && /TN-\d+/.test(line)) return true;
+  if (/^signature dishes\b/i.test(line)) return true;
+  return false;
 }
 
-function isLabelOnly(line: string): boolean {
-  return [
-    'ICED SHELLFISH PLATTERS',
-    'THE GRAND',
-    'THE DELUXE',
-    'THE KING',
-    'DOUBLE R RANCH · LOOMIS, WASHINGTON',
-    'SNAKE RIVER FARMS · BOISE, IDAHO · GOLD LABEL',
-    'FILET MIGNON',
-    'NEW YORK STEAK',
-    'WAGYU FLIGHT',
-    'PRIME NEW YORK STRIP',
-    'PRIME RIBEYE',
-    'RIBEYE',
-    'WHOLE',
-    '½ WHOLE'
-  ].includes(line.trim());
+function looksLikeMoney(line: string): boolean {
+  return MONEY_ONLY_RE.test(line);
 }
 
-function isRejectedMealLine(line: string): boolean {
-  const cleaned = cleanField(line) ?? line;
-
-  return (
-    !cleaned ||
-    /^\(.*crassostrea.*\)/i.test(cleaned) ||
-    /^\.{3,}$/.test(cleaned) ||
-    /\.{3,}/.test(cleaned) ||
-    /^[\d./½¾\s]+$/.test(cleaned) ||
-    /^serves\s+\d/i.test(cleaned) ||
-    /^(eastern|pacific)$/i.test(cleaned) ||
-    /^the raw bar$/i.test(cleaned) ||
-    /^choice of sauces$/i.test(cleaned) ||
-    /^featured oysters/i.test(cleaned)
-  );
+function parseMoney(line: string): string | undefined {
+  const match = line.match(MONEY_ONLY_RE);
+  return match?.[1];
 }
 
-function parsePriceFromLine(line: string): { name: string; price?: string } {
-  const cleaned = line.replace(/\.+/g, ' ').replace(/\s+/g, ' ').trim();
+function extractTrailingMoney(line: string): { name: string; price?: string } {
+  const cleaned = cleanText(line);
+  const match = cleaned.match(EMBEDDED_MONEY_RE);
 
-  const spacedMoneyMatch = cleaned.match(SPACED_MONEY_AT_END_RE);
-  if (spacedMoneyMatch && spacedMoneyMatch.index !== undefined) {
-    const name = cleaned
-      .slice(0, spacedMoneyMatch.index)
-      .trim()
-      .replace(/[,\-]+$/, '')
-      .trim();
-    const price = `${spacedMoneyMatch[1]}.${spacedMoneyMatch[2]}`;
-    if (name) return { name, price };
+  if (!match || match.index === undefined) {
+    return { name: cleaned };
   }
 
-  const moneyMatch = cleaned.match(MONEY_AT_END_RE);
-  if (moneyMatch && moneyMatch.index !== undefined) {
-    const price = moneyMatch[1].replace(/\s+/g, '');
-    const name = cleaned
-      .slice(0, moneyMatch.index)
-      .trim()
-      .replace(/[,\-]+$/, '')
-      .trim();
-    return { name, price };
+  const name = cleaned.slice(0, match.index).trim().replace(/[-,;:]+$/, '').trim();
+  const price = match[1];
+
+  if (!name) {
+    return { name: cleaned };
   }
 
-  const intMatch = cleaned.match(SIMPLE_PRICE_AT_END_RE);
-  if (intMatch && intMatch.index !== undefined) {
-    const before = cleaned.slice(0, intMatch.index).trim();
-    if (before && !/\d$/.test(before)) {
-      return { name: before, price: intMatch[1] };
-    }
+  return { name, price };
+}
+
+function looksLikeSectionHeader(line: string): boolean {
+  const lower = line.toLowerCase();
+
+  if (SECTION_HEADER_HINTS.some((hint) => lower.startsWith(hint))) return true;
+  if (/^(entrees?|fajitas?|burritos?|tacos?|steak|seafood|chicken|pork|vegetarians?|combinations?|quesadillas?|antojitos tradicionales|on the grill|desserts|appetizers|dips|sides|salads|a la carte)$/i.test(line)) {
+    return true;
   }
 
-  return { name: cleaned };
+  if (/^[A-Z0-9\s'&\-:/()#.]+$/.test(line) && line.length <= 50 && !looksLikeMoney(line)) {
+    return INCLUDED_SECTION_PATTERNS.some((re) => re.test(line)) || EXCLUDED_SECTION_PATTERNS.some((re) => re.test(line));
+  }
+
+  return false;
 }
 
-function shouldAppendDescription(line: string): boolean {
-  if (isNoise(line)) return false;
-  if (isDecorativeSection(line)) return false;
-  if (isKnownSection(line)) return false;
-  if (isLabelOnly(line)) return false;
-  if (MONEY_AT_END_RE.test(line)) return false;
-  if (SPACED_MONEY_AT_END_RE.test(line)) return false;
-  if (SIMPLE_PRICE_AT_END_RE.test(line) && /[A-Za-z]/.test(line)) return false;
-  if (isRejectedMealLine(line)) return false;
-  return /[a-z(]/.test(line);
+function normalizeSectionName(line: string): string {
+  return cleanText(line)
+    .replace(/^FOOD\s*-\s*/i, '')
+    .replace(/^LUNCH MENU\s*-\s*/i, 'Lunch - ')
+    .replace(/^FAVORITE NEW DISHES\s*-\s*/i, '')
+    .replace(/^DRINKS SPECIAL\s*-\s*/i, '')
+    .replace(/^PLATOS ESPECIAL\s*-\s*/i, '')
+    .replace(/^TODAYS SPECIAL\s*-\s*/i, '')
+    .trim();
 }
 
-function addDescription(item: MenuItem, line: string) {
-  const cleaned = line.replace(/\.+/g, ' ').replace(/\s+/g, ' ').trim();
+function appendDescription(item: MenuItem, line: string) {
+  const cleaned = cleanField(line);
+  if (!cleaned) return;
+
   item.description = item.description
     ? `${item.description} ${cleaned}`.replace(/\s+/g, ' ').trim()
     : cleaned;
 }
 
-function pushSectionIfNeeded(section: MenuSection, sections: MenuSection[]) {
-  if (section.items.length > 0) {
-    sections.push(section);
-  }
-}
-
-function scoreItem(item: MenuItem): number {
+function scoreMealSection(sectionName: string): number {
   let score = 0;
-  if (item.price) score += 4;
-  if (item.description) score += 2;
-  if (/[a-zA-Z]/.test(item.name)) score += 1;
+
+  if (INCLUDED_SECTION_PATTERNS.some((re) => re.test(sectionName))) score += 3;
+  if (EXCLUDED_SECTION_PATTERNS.some((re) => re.test(sectionName))) score -= 4;
+  if (/\blunch\b/i.test(sectionName) && /\bnachos?\b/i.test(sectionName)) score -= 3;
+  if (/\bexpress lunch\b/i.test(sectionName)) score += 1;
+  if (/\bspecial/i.test(sectionName)) score += 1;
+
   return score;
 }
 
-function dedupeSections(sections: MenuSection[]): MenuSection[] {
-  const map = new Map<string, MenuSection>();
+function scoreMealItem(item: MenuItem, sectionName: string): number {
+  const name = cleanField(item.name) ?? item.name;
+  const description = cleanField(item.description) ?? '';
+  const blob = `${name} ${description}`.trim();
 
-  for (const section of sections) {
-    const key = section.section.trim();
-    if (!map.has(key)) {
-      map.set(key, { section: key, items: [] });
+  let score = 0;
+
+  if (item.price) score += 2;
+  if (POSITIVE_ITEM_PATTERNS.some((re) => re.test(blob))) score += 4;
+  if (NEGATIVE_ITEM_PATTERNS.some((re) => re.test(blob))) score -= 5;
+  if (/\bseafood\b|\bsteak\b|\bchicken\b|\bpork\b|\bvegetarian\b|\bfajitas?\b|\bburritos?\b|\btacos?\b/i.test(sectionName)) score += 2;
+  if (/\bcombinations?\b/i.test(sectionName) && /^#\d+$/i.test(name)) score += 3;
+  if (/\bvegetarian\b/i.test(sectionName) && /\bvegetarian\b/i.test(name)) score += 2;
+
+  if (/^\(?\d+\)?\s+/.test(name) && !/\b(dinner|combo|special|fajita|burrito|taco|enchilada|quesadilla|tamale)\b/i.test(name)) {
+    score -= 2;
+  }
+
+  if (/^1\/2\b/i.test(name) || /\bsmall\b/i.test(name)) score -= 3;
+  if (/^no\b/i.test(name)) score -= 5;
+  if (parseFloat(item.price ?? '0') === 0) score -= 5;
+
+  return score;
+}
+
+function dedupeItems(items: MenuItem[]): MenuItem[] {
+  const map = new Map<string, MenuItem>();
+
+  for (const item of items) {
+    const key = (cleanField(item.name) ?? item.name).toUpperCase();
+    const existing = map.get(key);
+
+    if (!existing) {
+      map.set(key, item);
+      continue;
     }
 
-    const target = map.get(key)!;
-    const byName = new Map<string, MenuItem>();
+    const existingScore = (existing.price ? 2 : 0) + (existing.description ? 1 : 0);
+    const nextScore = (item.price ? 2 : 0) + (item.description ? 1 : 0);
 
-    for (const existing of target.items) {
-      byName.set(
-        (cleanField(existing.name) ?? existing.name).trim().toUpperCase(),
-        existing
-      );
-    }
-
-    for (const item of section.items) {
-      const normalizedName = (cleanField(item.name) ?? item.name)
-        .trim()
-        .toUpperCase();
-      const existing = byName.get(normalizedName);
-
-      if (!existing) {
-        target.items.push(item);
-        byName.set(normalizedName, item);
-        continue;
-      }
-
-      if (scoreItem(item) > scoreItem(existing)) {
-        const idx = target.items.indexOf(existing);
-        if (idx >= 0) target.items[idx] = item;
-        byName.set(normalizedName, item);
-      }
+    if (nextScore > existingScore) {
+      map.set(key, item);
     }
   }
 
   return [...map.values()];
 }
 
-function repairEntrees(section: MenuSection): MenuSection {
-  const repaired: MenuItem[] = [];
-
-  for (let i = 0; i < section.items.length; i++) {
-    const item = { ...section.items[i] };
-
-    if (
-      item.name === 'FARMED NEW ZEALAND KING SALMON' &&
-      item.description?.includes('WILD ALASKAN BLACK COD (SABLEFISH)')
-    ) {
-      const parts = item.description.split(
-        'WILD ALASKAN BLACK COD (SABLEFISH)'
-      );
-      repaired.push({
-        name: 'FARMED NEW ZEALAND KING SALMON',
-        description: parts[0].trim()
-      });
-
-      repaired.push({
-        name: 'WILD ALASKAN BLACK COD (SABLEFISH)',
-        description:
-          parts[1]?.trim() ||
-          'soba noodles, green onions, spiced fish broth'
-      });
-
-      continue;
-    }
-
-    if (
-      item.name === 'WILD ROSS SEA CHILEAN SEA BASS' &&
-      i + 1 < section.items.length &&
-      section.items[i + 1].name === '(MSC certified)'
-    ) {
-      const next = section.items[i + 1];
-      repaired.push({
-        name: 'WILD ROSS SEA CHILEAN SEA BASS (MSC certified)',
-        price: next.price,
-        description: next.description
-      });
-      i++;
-      continue;
-    }
-
-    repaired.push(item);
-  }
-
-  return { ...section, items: repaired };
-}
-
-function applyKnownPrices(sections: MenuSection[]): MenuSection[] {
-  return sections.map((section) => {
-    const items = section.items.map((item) => {
-      if (!item.price) {
-        const key = (cleanField(item.name) ?? item.name)
-          .trim()
-          .toUpperCase();
-        const known = KNOWN_PRICES[key];
-        if (known) {
-          return { ...item, price: known };
-        }
-      }
-      return item;
-    });
-    return { ...section, items };
-  });
-}
-
-function repairSections(sections: MenuSection[]): MenuSection[] {
-  return applyKnownPrices(
-    sections
-      .map((section) => {
-        const items = section.items
-          .map((item) => {
-            const cleaned: MenuItem = {
-              name: cleanField(item.name) ?? item.name,
-              price: item.price ? cleanField(item.price) : item.price,
-              description: cleanField(item.description)
-            };
-
-            if (cleaned.description) {
-              cleaned.description = cleaned.description
-                .replace(/\bth$/, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-            }
-
-            return cleaned;
-          })
-          .filter((item) => {
-            const name = item.name.trim();
-
-            if (/^(½½WHOLE|½WHOLE|½ WHOLE|WHOLE)$/i.test(name)) return false;
-            if (/^First of Season!$/i.test(name)) return false;
-            if (isRejectedMealLine(name)) return false;
-
-            if (section.section === 'SUSHI') {
-              if (
-                /^serves\s+\d/i.test(name) ||
-                /^(KUMAMOTO|WILDCAT|RAPPAHANNOCK|WILD LITTLENECK CLAMS|FARMED PERUVIAN BAY SCALLOPS|FARMED TOTTEN INLET MEDITERRANEAN MUSSELS|1 LB NORTH AMERICAN HARD SHELL LOBSTER|LARGE CHANNEL ISLANDS RED SEA URCHIN)$/i.test(
-                  name
-                )
-              ) {
-                return false;
-              }
-            }
-
-            if (section.section === 'CRUSTACEANS') {
-              if (
-                /^(ROASTED CHICKEN & BABY KALE SALAD|WILD JUMBO SHRIMP LOUIE SALAD\*|BACON CHEDDAR CHEESEBURGER|NEW ENGLAND LOBSTER ROLL)$/i.test(
-                  name
-                )
-              ) {
-                return false;
-              }
-            }
-
-            if (
-              section.section === 'FIRST OF SEASON: WILD PACIFIC HALIBUT' &&
-              /^The Wild Pacific Halibut Season has opened!/i.test(name)
-            ) {
-              return false;
-            }
-
-            return true;
-          });
-
-        return { ...section, items };
-      })
-      .map((section) =>
-        section.section === 'ENTREES' ? repairEntrees(section) : section
-      )
-      .filter((section) => section.items.length > 0)
-  );
+function isLikelyDescriptionLine(line: string): boolean {
+  if (looksLikeMoney(line)) return false;
+  if (looksLikeSectionHeader(line)) return false;
+  if (/^US\$?/i.test(line)) return false;
+  if (/^[A-Z0-9\s'&\-:/()#.]+$/.test(line) && line.length < 60) return false;
+  return /[a-z]/.test(line);
 }
 
 function parseMenuText(text: string, sourceFile: string): ParsedMenu {
   const lines = normalizeLines(text);
   const sections: MenuSection[] = [];
-  let current: MenuSection = { section: 'MENU', items: [] };
-  let lastItem: MenuItem | null = null;
-  let skipComplexSection = false;
 
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
+  let current: MenuSection = { section: 'MENU', items: [] };
+  let pendingName: string | null = null;
+  let lastItem: MenuItem | null = null;
+
+  const flushSection = () => {
+    const deduped = dedupeItems(current.items)
+      .map((item) => ({
+        name: cleanField(item.name) ?? item.name,
+        price: cleanField(item.price),
+        description: cleanField(item.description)
+      }))
+      .filter((item) => item.name);
+
+    if (deduped.length > 0) {
+      sections.push({
+        section: cleanField(current.section) ?? current.section,
+        items: deduped
+      });
+    }
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
     if (isNoise(line)) continue;
 
-    if (isDecorativeSection(line)) {
-      const sectionName = extractDecorativeSection(line);
-      pushSectionIfNeeded(current, sections);
-      current = { section: sectionName, items: [] };
+    if (looksLikeSectionHeader(line)) {
+      if (pendingName) {
+        current.items.push({ name: pendingName });
+        pendingName = null;
+      }
+
+      flushSection();
+      current = { section: normalizeSectionName(line), items: [] };
       lastItem = null;
-      skipComplexSection = SKIP_SECTION_RE.test(sectionName);
       continue;
     }
 
-    if (isKnownSection(line)) {
-      pushSectionIfNeeded(current, sections);
-      current = { section: line, items: [] };
-      lastItem = null;
-      skipComplexSection = SKIP_SECTION_RE.test(line);
+    if (looksLikeMoney(line)) {
+      const price = parseMoney(line);
+      if (pendingName && price) {
+        const item: MenuItem = { name: pendingName, price };
+        current.items.push(item);
+        lastItem = item;
+        pendingName = null;
+      }
       continue;
     }
 
-    if (skipComplexSection) continue;
-
-    if (!ALLOWED_MEAL_SECTIONS.has(current.section)) {
-      continue;
-    }
-
-    if (isRejectedMealLine(line)) continue;
-
-    if (shouldAppendDescription(line) && lastItem) {
-      addDescription(lastItem, line);
-      continue;
-    }
-
-    const parsed = parsePriceFromLine(line);
-    if (!parsed.name) continue;
-
-    const normalizedName = cleanField(parsed.name) ?? parsed.name;
-    if (isLabelOnly(normalizedName) && !parsed.price) continue;
-    if (isRejectedMealLine(normalizedName)) continue;
-
-    const looksLikeMealTitle =
-      /^[A-Z0-9][A-Z0-9 '&()\-,.*:/]+$/i.test(normalizedName) &&
-      normalizedName.length >= 3;
-
-    if (parsed.price || looksLikeMealTitle) {
+    const embedded = extractTrailingMoney(line);
+    if (embedded.price) {
       const item: MenuItem = {
-        name: normalizedName,
-        ...(parsed.price ? { price: parsed.price } : {})
+        name: embedded.name,
+        price: embedded.price
       };
       current.items.push(item);
       lastItem = item;
+      pendingName = null;
+      continue;
     }
+
+    if (isLikelyDescriptionLine(line) && lastItem) {
+      appendDescription(lastItem, line);
+      continue;
+    }
+
+    if (pendingName) {
+      current.items.push({ name: pendingName });
+    }
+
+    pendingName = cleanField(line) ?? line;
+    lastItem = null;
   }
 
-  pushSectionIfNeeded(current, sections);
+  if (pendingName) {
+    current.items.push({ name: pendingName });
+  }
+
+  flushSection();
+
+  const filteredSections = sections
+    .map((section) => {
+      const sectionScore = scoreMealSection(section.section);
+
+      const keptItems = section.items.filter((item) => {
+        const itemScore = scoreMealItem(item, section.section);
+
+        if (sectionScore <= -2) return itemScore >= 4;
+        if (sectionScore >= 2) return itemScore >= 1;
+        return itemScore >= 3;
+      });
+
+      return {
+        section: section.section,
+        items: dedupeItems(keptItems)
+      };
+    })
+    .filter((section) => {
+      if (section.items.length === 0) return false;
+      const score = scoreMealSection(section.section);
+      return score >= -1 || section.items.length >= 2;
+    });
 
   return {
     sourceFile,
     extractedAt: new Date().toISOString(),
-    sections: repairSections(dedupeSections(sections))
+    sections: filteredSections
   };
 }
 
