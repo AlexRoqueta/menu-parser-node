@@ -7,7 +7,7 @@ import {
   filterParsedMenuToDishes,
   parseMenuText,
   toTableSommDishes
-} from './menuParser';
+} from './menuParser.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
