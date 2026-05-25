@@ -440,6 +440,111 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     });
   }
 
+  // ============ POST-PASS SECTION-BOUNDARY FIXES ============
+  // Items the PDF lays out under one section header but logically belong elsewhere.
+
+  // Helper: get or create a section by name
+  function ensureSection(name: string): MenuSection {
+    for (const s of merged) if (s.section.toUpperCase() === name.toUpperCase()) return s;
+    const s: MenuSection = { section: name, items: [] };
+    merged.push(s);
+    return s;
+  }
+
+  // (1) Move sandwich/salad items that ended up in CRUSTACEANS over to SALADS & SANDWICHES
+  const crust = merged.find((s) => s.section.toUpperCase() === 'CRUSTACEANS');
+  if (crust) {
+    const SANDWICH_PATTERNS = [
+      /^ROASTED CHICKEN/i,
+      /^WILD JUMBO SHRIMP LOUIE/i,
+      /^BACON CHEDDAR CHEESEBURGER/i,
+      /^NEW ENGLAND LOBSTER ROLL/i
+    ];
+    const movedToSandwich: MenuItem[] = [];
+    crust.items = crust.items.filter((it) => {
+      if (SANDWICH_PATTERNS.some((re) => re.test(it.name))) {
+        movedToSandwich.push(it);
+        return false;
+      }
+      return true;
+    });
+    if (movedToSandwich.length > 0) {
+      const sandwich = ensureSection('SALADS & SANDWICHES');
+      sandwich.items.push(...movedToSandwich);
+    }
+  }
+
+  // (2) Move USDA-Prime-style items out of WAGYU GOLD into USDA PRIME STEAKS.
+  // The PDF puts items with explicit "PRIME" prefix under the WAGYU GOLD header,
+  // but they are NOT wagyu — they belong with USDA PRIME STEAKS.
+  // (The 2nd FILET MIGNON/RIBEYE blocks in the WAGYU section ARE genuine wagyu,
+  // identified by higher prices, so we leave them and just relabel them.)
+  const wagyu = merged.find((s) => s.section.toUpperCase() === 'WAGYU GOLD');
+  if (wagyu) {
+    const PRIME_BLEED_PATTERNS = [
+      /^PRIME NEW YORK STRIP\b/i,
+      /^PRIME RIBEYE\b/i
+    ];
+    const movedToPrime: MenuItem[] = [];
+    wagyu.items = wagyu.items.filter((it) => {
+      if (PRIME_BLEED_PATTERNS.some((re) => re.test(it.name))) {
+        movedToPrime.push(it);
+        return false;
+      }
+      return true;
+    });
+    if (movedToPrime.length > 0) {
+      const prime = ensureSection('USDA PRIME STEAKS');
+      prime.items.push(...movedToPrime);
+    }
+    // Relabel remaining FILET MIGNON / RIBEYE items inside WAGYU GOLD with "WAGYU" prefix
+    for (const it of wagyu.items) {
+      if (/^FILET MIGNON\b/i.test(it.name) && !/WAGYU/i.test(it.name)) {
+        it.name = `WAGYU ${it.name}`;
+      } else if (/^RIBEYE\b/i.test(it.name) && !/WAGYU/i.test(it.name)) {
+        it.name = `WAGYU ${it.name}`;
+      }
+    }
+  }
+
+  // (3) Collapse WAGYU FLIGHT into a single item with combined sizes.
+  // The PDF prints "3oz Ribeye* · 3oz New York* · 3oz Filet Mignon*  105" as one row;
+  // the steak-expansion step splits it into 3 items where only the first has a price.
+  // Re-combine into one item with all three sizes listed.
+  const wagyu2 = merged.find((s) => s.section.toUpperCase() === 'WAGYU GOLD');
+  if (wagyu2) {
+    const flights: MenuItem[] = [];
+    const other: MenuItem[] = [];
+    for (const it of wagyu2.items) {
+      if (/^WAGYU FLIGHT/i.test(it.name)) flights.push(it);
+      else other.push(it);
+    }
+    if (flights.length > 1) {
+      const sizes = flights.map((f) => {
+        const m = f.name.match(/—\s*(.+)$/);
+        return m ? m[1].trim() : f.name;
+      });
+      const priceObj = flights.find((f) => f.price);
+      const combined: MenuItem = {
+        name: `WAGYU FLIGHT — ${sizes.join(' · ')}`,
+        price: priceObj?.price
+      };
+      // Insert at the position of the first flight
+      const firstFlightIdx = wagyu2.items.indexOf(flights[0]);
+      wagyu2.items = other;
+      wagyu2.items.splice(firstFlightIdx, 0, combined);
+    }
+  }
+
+  // (4) Drop empty sections (e.g. WHOLE FISH with no items, no notes, no tiers)
+  for (let i = merged.length - 1; i >= 0; i--) {
+    const s = merged[i];
+    if (s.items.length === 0 && !s.notes && !s.platterTiers) {
+      merged.splice(i, 1);
+    }
+  }
+  // ============ END POST-PASS ============
+
   // Dedup notes strings (collapse repeated phrase-level duplicates)
   // Handles "served with X served with X" and "phrase. phrase." patterns.
   for (const sec of merged) {
