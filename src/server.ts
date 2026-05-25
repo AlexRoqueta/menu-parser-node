@@ -31,21 +31,20 @@ const TOP_LEVEL_HEADINGS = new Set([
   'OYSTER SAMPLER', 'HALFWHOLE', 'WHOLE', 'EACH', '½ DOZEN', '1 DOZEN',
   'EACH½ DOZEN1 DOZEN', 'EACH½ POUND1 POUND'
 ]);
-// Section-like names that often appear inline (no :: markers) — promote them
 const INLINE_SECTION_NAMES = new Set([
   'ICED SHELLFISH PLATTERS', 'WHOLE FISH', 'ENTREES', 'USDA PRIME STEAKS',
   'WAGYU GOLD', 'SIDES', 'CRUSTACEANS', 'SALADS & SANDWICHES'
 ]);
+// Promo/marketing section blocks — preserve as a section but mark items as non-dish
+const PROMO_SECTIONS = new Set([
+  'FIRST OF SEASON: WILD PACIFIC HALIBUT'
+]);
 
 const PRICE_RE = /(\$?\d+(?:\.\d{2})?)\s*$/;
 const LEADER_DOTS_RE = /\.{3,}/g;
-// Splits glued price columns like "3.9022.4043.80" → ["3.90","22.40","43.80"]
 const GLUED_PRICES_RE = /(\d+\.\d{2})(?=\d)/g;
-// Date stub like "Monday, May" / "Monday, May 18th"
 const DATE_STUB_RE = /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s+\w+(?:\s+\d+(?:st|nd|rd|th)?)?\b/g;
-// Steak size: "6oz Petite Cut*" or "8oz Center Cut*" or "12oz Thick Cut NY Strip*"
-const STEAK_SIZE_RE = /(\d+oz\s+[^*]+?\*)/g;
-// Junk patterns
+const STEAK_SIZE_RE = /(\d+oz\s+[^*·]+?\*)/g;
 const JUNK_RE = /^(?:\*+|[½¼¾]+|th|nd|rd|st|EACH½ DOZEN1 DOZEN|EACH½ POUND1 POUND|HALFWHOLE|½WHOLE|½½WHOLE|[\s\W]+)$/i;
 
 const upload = multer({
@@ -57,18 +56,13 @@ function normalizeLines(text: string): string[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.replace(/\s+/g, ' ').trim())
-    // Strip date stubs like "Monday, May 18th"
     .map((line) => line.replace(DATE_STUB_RE, '').trim())
-    // Replace leader dots with a space
     .map((line) => line.replace(LEADER_DOTS_RE, ' ').replace(/\s+/g, ' ').trim())
-    // Separate glued price columns
     .map((line) => line.replace(GLUED_PRICES_RE, '$1 ').replace(/\s+/g, ' ').trim())
     .filter(Boolean);
 }
 
-function isSection(line: string): boolean {
-  return SECTION_RE.test(line);
-}
+function isSection(line: string): boolean { return SECTION_RE.test(line); }
 
 function extractSectionName(line: string): string {
   const m = line.match(SECTION_RE);
@@ -81,16 +75,20 @@ function isJunk(line: string): boolean {
   if (/consuming raw or undercooked/i.test(line)) return true;
   if (/^(general manager|executive chef|chef de cuisine|sous chef|owner|head chef)\b/i.test(line)) return true;
   if (/^first of season!?$/i.test(line)) return true;
-  // Ranch/farm location subheaders (e.g. "DOUBLE R RANCH · LOOMIS, WASHINGTON")
   if (/^[A-Z][A-Z\s&]+(?:RANCH|FARMS?|RANCHES)\b.*·/i.test(line)) return true;
   if (/^SNAKE RIVER FARMS\b/i.test(line)) return true;
   return false;
 }
 
 function looksLikeNewItem(line: string): boolean {
+  // Must be mostly uppercase at the start; lowercase-led lines are descriptions.
+  const firstWord = line.split(/\s/)[0];
+  if (!/^[A-Z0-9'"&\-\.()*]/.test(firstWord)) return false;
   const firstTokenMatch = line.match(/^[A-Z0-9'"&\-\.()*]+(?:\s+[A-Z0-9'"&\-\.()*]+)*/);
   if (!firstTokenMatch) return false;
   const heading = firstTokenMatch[0];
+  // Skip lines that start with a parenthetical alone (e.g. "(MSC certified) ...")
+  if (/^\([^)]+\)$/.test(heading.trim())) return false;
   const upperCount = (heading.match(/[A-Z]/g) || []).length;
   if (upperCount < 2) return false;
   return heading.length >= Math.min(line.length, 4);
@@ -115,10 +113,7 @@ function parseItem(line: string): MenuItem {
   const { name, prices } = splitMultiPriceLine(line);
   if (prices.length === 0) return { name: line };
   if (prices.length === 1) return { name, price: prices[0] };
-  // Multi-column → store all
-  const numericTiers: PriceTier[] = prices.map((p) => ({
-    price: Number(p.replace(/\$/g, ''))
-  }));
+  const numericTiers: PriceTier[] = prices.map((p) => ({ price: Number(p.replace(/\$/g, '')) }));
   return { name, price: prices[0], priceTiers: numericTiers };
 }
 
@@ -129,7 +124,6 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
 
   function flushCurrent() {
     if (current.items.length > 0 || current.section !== 'MENU') {
-      // Merge with previous section if same name
       const prev = sections[sections.length - 1];
       if (prev && prev.section === current.section) {
         prev.items.push(...current.items);
@@ -143,14 +137,12 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     const line = rawLine.trim();
     if (!line) continue;
 
-    // Explicit "::" section header
     if (isSection(line)) {
       flushCurrent();
       current = { section: extractSectionName(line), items: [] };
       continue;
     }
 
-    // Inline section names without :: markers
     if (INLINE_SECTION_NAMES.has(line.toUpperCase())) {
       flushCurrent();
       current = { section: line.toUpperCase(), items: [] };
@@ -160,7 +152,18 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
     if (TOP_LEVEL_HEADINGS.has(line.toUpperCase())) continue;
     if (isJunk(line)) continue;
 
-    // Continuation line → append to previous item
+    // Parenthetical-led continuation: "(MSC certified) ..."
+    if (/^\(/.test(line) && current.items.length > 0) {
+      const prev = current.items[current.items.length - 1];
+      const priceMatch = line.match(PRICE_RE);
+      const textPart = priceMatch ? line.replace(PRICE_RE, '').trim() : line;
+      prev.description = prev.description
+        ? `${prev.description} ${textPart}`.trim()
+        : textPart;
+      if (priceMatch && !prev.price) prev.price = priceMatch[1];
+      continue;
+    }
+
     if (!looksLikeNewItem(line) && current.items.length > 0) {
       const prev = current.items[current.items.length - 1];
       const priceMatch = line.match(PRICE_RE);
@@ -172,37 +175,51 @@ function parseMenuText(text: string, sourceFile: string): ParsedMenu {
       continue;
     }
 
-    // Special case: parenthetical line like "(MSC certified)" → merge into previous
-    if (/^\(.+\)$/.test(line.split(' ')[0]) && current.items.length > 0) {
-      const prev = current.items[current.items.length - 1];
-      prev.description = prev.description ? `${prev.description} ${line}` : line;
-      continue;
-    }
-
     current.items.push(parseItem(line));
   }
 
   flushCurrent();
 
-  // Post-process: expand steak-size variants
+  // Drop promo/marketing sections entirely (or keep them but flag — here we drop items but keep section)
   for (const section of sections) {
+    if (PROMO_SECTIONS.has(section.section)) {
+      section.items = section.items.filter((it) =>
+        // Only keep items that look like actual dishes (UPPER CASE name, has a normal price)
+        /^[A-Z]/.test(it.name) && it.name.length < 80 && it.price && Number(it.price) < 500
+      );
+    }
+  }
+
+  // Steak-size expansion (only inside steak-type sections)
+  const STEAK_SECTIONS = /STEAK|WAGYU|FILET|RIBEYE/i;
+  for (const section of sections) {
+    if (!STEAK_SECTIONS.test(section.section)) continue;
     const expanded: MenuItem[] = [];
     for (const item of section.items) {
       const desc = item.description ?? '';
-      const sizeMatches = [...desc.matchAll(STEAK_SIZE_RE)];
-      if (sizeMatches.length >= 2 && item.priceTiers && item.priceTiers.length === sizeMatches.length) {
+      const sizeMatches = [...desc.matchAll(STEAK_SIZE_RE)].map((m) => m[1].trim());
+
+      if (sizeMatches.length >= 2) {
+        // Try priceTiers first
+        if (item.priceTiers && item.priceTiers.length === sizeMatches.length) {
+          for (let i = 0; i < sizeMatches.length; i++) {
+            expanded.push({
+              name: `${item.name} — ${sizeMatches[i]}`,
+              price: String(item.priceTiers[i].price)
+            });
+          }
+          continue;
+        }
+        // No priceTiers — single price + multiple sizes. Keep base, but split sizes into separate items with no price.
         for (let i = 0; i < sizeMatches.length; i++) {
           expanded.push({
-            name: `${item.name} — ${sizeMatches[i][1].trim()}`,
-            price: String(item.priceTiers[i].price)
+            name: `${item.name} — ${sizeMatches[i]}`,
+            price: i === 0 ? item.price : undefined
           });
         }
-      } else if (sizeMatches.length >= 2 && item.price) {
-        // Only one price collected but multiple sizes in desc — keep base item
-        expanded.push(item);
-      } else {
-        expanded.push(item);
+        continue;
       }
+      expanded.push(item);
     }
     section.items = expanded;
   }
@@ -257,6 +274,8 @@ function toTableSommDishes(parsed: ParsedMenu): TableSommDish[] {
       if (!name || name.length < 3) continue;
       if (/^(menu|dinner|lunch|brunch|pacific|eastern)$/i.test(name)) continue;
       if (/^::.+::$/.test(name)) continue;
+      // Skip section-note lines (no price, very long, sentence-like)
+      if (!item.price && name.length > 60 && /\s[a-z]/.test(name)) continue;
 
       const combined = `${name} ${item.description ?? ''}`.trim();
       const protein = inferProtein(combined);
