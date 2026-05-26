@@ -17,11 +17,14 @@
  */
 import {
   callOpenAiJson,
+  callOpenAiVisionJson,
   parseLlmJson,
   coerceMoney,
   type ChatMessage,
-  type LlmCallOptions
+  type LlmCallOptions,
+  type VisionImage
 } from './llmClient.js';
+import { imageBufferToDataUrl } from './pdfRender.js';
 
 export type MealPrice = number | string | Record<string, number | string> | null;
 
@@ -72,6 +75,8 @@ export type TableSommDishLlm = {
 };
 
 export const MENU_LLM_PARSER_VERSION = '2.3.0-llm-chunked-water-grill';
+/** Parser version reported when the meal vision pipeline is used. */
+export const MENU_LLM_PARSER_VERSION_VISION = '2.4.0-llm-vision';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_EXTRACTION_SCOPE =
   'Only full meal items reasonably pairable with wine. Excludes cocktails, drinks, appetizers, sushi, snacks, raw bar items, shellfish platters, sides, soups, desserts, and other non-entree content.';
@@ -965,6 +970,109 @@ export function toTableSommDish(rec: DishLlmRecord, index: number): TableSommDis
 
 export function toTableSommDishes(extraction: MenuLlmExtraction): TableSommDishLlm[] {
   return extraction.meals.map((d, i) => toTableSommDish(d, i));
+}
+
+/**
+ * Vision counterpart to {@link extractMenuWithLlm}. Takes PNG/JPEG bytes (one
+ * per rendered PDF page or a single uploaded image) and asks the LLM to apply
+ * the same full-meal extraction rules directly to the rendered pixels.
+ *
+ * Returned shape is identical to the text path: the same `meals` /
+ * `dishes` arrays and the same Water Grill augmentation (whole-fish species,
+ * Mary's organic chicken, steak rewrites) so the `/parse-menu` JSON stays
+ * frontend-compatible.
+ */
+export type ExtractMenuWithVisionOptions = LlmCallOptions & {
+  sourceFile: string;
+  extractionScope?: string;
+  /** Raw image bytes, one per menu page or one for a direct image upload. */
+  images: Buffer[];
+  /** Optional page numbers for `images[i]` (1-indexed). */
+  pageNumbers?: number[];
+  /** Detail hint forwarded to the model. */
+  detail?: 'low' | 'high' | 'auto';
+  /**
+   * Optional override of the underlying vision call. Used by tests to avoid
+   * needing a real OPENAI_API_KEY or network access.
+   */
+  callVision?: (
+    input: { system: string; userText: string; images: VisionImage[] },
+    options: LlmCallOptions & { defaultModel: string; modelEnvVar?: string }
+  ) => Promise<string>;
+};
+
+export function buildMenuVisionUserPrompt(opts: {
+  sourceFile: string;
+  pageNumbers?: number[];
+  imageCount: number;
+}): string {
+  const labels =
+    opts.pageNumbers && opts.pageNumbers.length === opts.imageCount
+      ? opts.pageNumbers.map((n) => `page-${n}`).join(', ')
+      : Array.from({ length: opts.imageCount }, (_, i) => `image-${i + 1}`).join(', ');
+  return [
+    `Source file: ${opts.sourceFile}`,
+    '',
+    'You are looking at one or more rendered pages of a restaurant FOOD menu.',
+    `The attached images correspond to ${labels}.`,
+    'Extract full meal items per the rules in your system prompt — full meals',
+    'pairable with wine ONLY (entrees, whole fish, steaks, composed seafood',
+    'mains, lobster rolls, sandwiches/burgers as a main, composed entree',
+    'salads). Exclude cocktails, beer, wine, spirits, appetizers, raw bar,',
+    'sushi/sashimi/rolls, shellfish platters/towers, soups, sides, and',
+    'desserts. Use the same JSON schema you would for text input. Populate',
+    '`source_pages` with the page number printed on the image when visible,',
+    'otherwise leave it empty. Return raw JSON only.'
+  ].join('\n');
+}
+
+export async function extractMenuWithVision(
+  opts: ExtractMenuWithVisionOptions
+): Promise<MenuLlmExtraction> {
+  if (!opts.images || opts.images.length === 0) {
+    throw new Error('extractMenuWithVision requires at least one image buffer');
+  }
+  const userText = buildMenuVisionUserPrompt({
+    sourceFile: opts.sourceFile,
+    pageNumbers: opts.pageNumbers,
+    imageCount: opts.images.length
+  });
+  const visionImages: VisionImage[] = opts.images.map((buf) => ({
+    url: imageBufferToDataUrl(buf),
+    detail: opts.detail ?? 'high'
+  }));
+  const caller = opts.callVision ?? callOpenAiVisionJson;
+  const content = await caller(
+    { system: SYSTEM_PROMPT, userText, images: visionImages },
+    {
+      apiKey: opts.apiKey,
+      model: opts.model,
+      baseUrl: opts.baseUrl,
+      fetchImpl: opts.fetchImpl,
+      defaultModel: DEFAULT_MODEL,
+      modelEnvVar: 'MENU_PARSER_MODEL'
+    }
+  );
+  const parsed = parseLlmJson(content);
+  const normalized = validateAndNormalizeMenu(parsed, {
+    sourceFile: opts.sourceFile,
+    extractionScope: opts.extractionScope
+  });
+  // Backfill source_pages from supplied page numbers when the model didn't.
+  if (opts.pageNumbers && opts.pageNumbers.length === opts.images.length) {
+    const all = [...opts.pageNumbers].sort((a, b) => a - b);
+    for (const m of normalized.meals) {
+      if (!m.source_pages || m.source_pages.length === 0) {
+        m.source_pages = [...all];
+      }
+    }
+  }
+  // Run the same Water Grill augmentation used by the text path so a missing
+  // whole-fish/chicken/steak rename behaves consistently across pipelines.
+  // We pass the page numbers as fake "pages" only when none are available so
+  // the heuristic functions stay defensive — they look for ":: WHOLE FISH ::"
+  // text which the vision model is also expected to surface in dish names.
+  return augmentWaterGrillMeals(normalized, {});
 }
 
 export {

@@ -1,11 +1,14 @@
 import pdf from 'pdf-parse';
 import {
   callOpenAiJson,
+  callOpenAiVisionJson,
   parseLlmJson as sharedParseLlmJson,
   coerceMoney as sharedCoerceMoney,
   type ChatMessage,
-  type LlmCallOptions as SharedLlmCallOptions
+  type LlmCallOptions as SharedLlmCallOptions,
+  type VisionImage
 } from './llmClient.js';
+import { imageBufferToDataUrl } from './pdfRender.js';
 
 export type WineLlmPrices = {
   glass?: number;
@@ -64,6 +67,8 @@ export type TableSommWine = {
 };
 
 export const WINE_LLM_PARSER_VERSION = '2.2.0-llm-chunked-counts';
+/** Parser version reported when the wine vision pipeline is used. */
+export const WINE_LLM_PARSER_VERSION_VISION = '2.3.0-llm-vision';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_EXTRACTION_SCOPE =
@@ -700,6 +705,100 @@ export function toTableSommWine(rec: WineLlmRecord, index: number): TableSommWin
 
 export function toTableSommWines(extraction: WineLlmExtraction): TableSommWine[] {
   return extraction.wines.map((rec, i) => toTableSommWine(rec, i));
+}
+
+/**
+ * Vision counterpart to {@link extractWinesWithLlm}. Takes one or more PNG/JPEG
+ * buffers (each representing a single menu page or a single uploaded image)
+ * and asks the LLM to extract wines directly from the rendered pixels.
+ *
+ * Used by the server when:
+ *   - the upload is an image; or
+ *   - the upload is a PDF that produced no extractable text (image-only PDF).
+ */
+export type ExtractWinesWithVisionOptions = LlmCallOptions & {
+  sourceFile: string;
+  extractionScope?: string;
+  /** Raw image bytes. Each entry is treated as one menu page. */
+  images: Buffer[];
+  /** Optional page numbers for `images[i]` (1-indexed). */
+  pageNumbers?: number[];
+  /** Detail hint forwarded to the model. */
+  detail?: 'low' | 'high' | 'auto';
+  /** Optional override of the underlying vision call (mostly for tests). */
+  callVision?: (
+    input: { system: string; userText: string; images: VisionImage[] },
+    options: LlmCallOptions & { defaultModel: string; modelEnvVar?: string }
+  ) => Promise<string>;
+};
+
+export function buildWineVisionUserPrompt(opts: {
+  sourceFile: string;
+  pageNumbers?: number[];
+  imageCount: number;
+}): string {
+  const labels =
+    opts.pageNumbers && opts.pageNumbers.length === opts.imageCount
+      ? opts.pageNumbers.map((n) => `page-${n}`).join(', ')
+      : Array.from({ length: opts.imageCount }, (_, i) => `image-${i + 1}`).join(', ');
+  return [
+    `Source file: ${opts.sourceFile}`,
+    '',
+    'You are looking at one or more rendered pages of a restaurant wine list.',
+    `The attached images correspond to ${labels}.`,
+    'Extract wines per the rules in your system prompt. Use the same JSON',
+    'schema you would for text input. Populate `source_pages` with the page',
+    'number(s) printed on the image when visible, otherwise leave it empty.',
+    'Return raw JSON only.'
+  ].join('\n');
+}
+
+export async function extractWinesWithVision(
+  opts: ExtractWinesWithVisionOptions
+): Promise<WineLlmExtraction> {
+  if (!opts.images || opts.images.length === 0) {
+    throw new Error('extractWinesWithVision requires at least one image buffer');
+  }
+  const userText = buildWineVisionUserPrompt({
+    sourceFile: opts.sourceFile,
+    pageNumbers: opts.pageNumbers,
+    imageCount: opts.images.length
+  });
+  const visionImages: VisionImage[] = opts.images.map((buf) => ({
+    url: imageBufferToDataUrl(buf),
+    detail: opts.detail ?? 'high'
+  }));
+  const caller = opts.callVision ?? callOpenAiVisionJson;
+  const content = await caller(
+    { system: SYSTEM_PROMPT, userText, images: visionImages },
+    {
+      apiKey: opts.apiKey,
+      model: opts.model,
+      baseUrl: opts.baseUrl,
+      fetchImpl: opts.fetchImpl,
+      defaultModel: DEFAULT_MODEL,
+      modelEnvVar: 'WINE_PARSER_MODEL'
+    }
+  );
+  const parsed = sharedParseLlmJson(content);
+  const part = validateAndNormalize(parsed, {
+    sourceFile: opts.sourceFile,
+    extractionScope: opts.extractionScope
+  });
+  // Backfill source_pages / page from the provided page numbers when the
+  // model didn't report them.
+  if (opts.pageNumbers && opts.pageNumbers.length === opts.images.length) {
+    const all = [...opts.pageNumbers].sort((a, b) => a - b);
+    for (const w of part.wines) {
+      if (!w.source_pages || w.source_pages.length === 0) {
+        w.source_pages = [...all];
+      }
+      if (w.page == null && all.length === 1) {
+        w.page = all[0];
+      }
+    }
+  }
+  return part;
 }
 
 export {
