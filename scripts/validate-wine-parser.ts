@@ -66,6 +66,38 @@ Justin, Cabernet Sauvignon, Adelaida District, CA 2020100
 Caymus, Cabernet Sauvignon, Napa Valley, USA 2020 165
 `;
 
+const GEO_AND_BEVERAGE_NOISE = `
+WINE LIST
+
+RED
+Acrobat, Pinot Noir, Russian River Valley, CA 2023 179
+Coast, CA
+Coast, CA
+Coast, CA
+Cooper Mountain, Valley, OR
+Valley, OR
+
+WHITE
+Domaine Leflaive, Chassagne-Montrachet, Burgundy, France 2019 285
+Château de Beaucastel, Châteauneuf-du-Pape, Southern Rhône, France 2018 220
+Chassagne-Montrachet
+Châteauneuf-du-Pape, Southern Rhône
+
+BEER
+Coors Light light lager 7
+Corona Extra mexican lager 8
+Stella Artois pilsner 9
+Guinness stout 10
+White Claw hard seltzer 8
+Angry Orchard hard cider 8
+
+COCKTAILS
+Aperol Spritz 14
+Classic Margarita 15
+Espresso Martini 16
+Old Fashioned 17
+`;
+
 function runSample(label: string, source: string) {
   const parsed = parseWineText(source, `${label}.txt`);
   const wines = filterFoodNoise(toWineEntries(parsed));
@@ -91,6 +123,10 @@ function main() {
   const { parsed: gluedParsed, wines: gluedWines } = runSample(
     'GLUED_NUMBERS_WINE_LIST',
     GLUED_NUMBERS_WINE_LIST
+  );
+  const { parsed: geoParsed, wines: geoWines } = runSample(
+    'GEO_AND_BEVERAGE_NOISE',
+    GEO_AND_BEVERAGE_NOISE
   );
 
   console.log('\n=== Sample entries (first 3) ===');
@@ -216,6 +252,89 @@ function main() {
     [
       'GLUED: no entry has all-digit name',
       gluedWines.every((w) => !/^\d+$/.test(w.name.replace(/\s+/g, '')))
+    ],
+
+    // Geo-only fragment + beverage filtering assertions
+    [
+      'GEO: "Coast, CA" rejected (geo-only fragment)',
+      !geoWines.some((w) => /^coast$/i.test(`${w.producer ?? ''} ${w.name}`.trim().replace(/,?\s*ca$/i, '').trim()))
+        && !geoWines.some((w) => /coast/i.test(w.name) && (w.country === 'USA' || /CA/i.test(w.region ?? '')) && !w.producer && !w.vintage && !w.price && !w.varietal)
+    ],
+    [
+      'GEO: no entry has bare "Coast" as name',
+      !geoWines.some((w) => /^coast$/i.test(w.name.trim()))
+    ],
+    [
+      'GEO: no entry has bare "Valley" as name',
+      !geoWines.some((w) => /^valley$/i.test(w.name.trim()))
+    ],
+    [
+      'GEO: "Cooper Mountain, Valley, OR" rejected (geo-only multi-fragment)',
+      !geoWines.some((w) => /cooper mountain/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'GEO: duplicate "Coast, CA" entries de-duplicated',
+      geoWines.filter((w) => /coast/i.test(w.name) && !w.varietal && !w.producer).length <= 1
+    ],
+    [
+      'GEO: real wine "Acrobat / Pinot Noir / Russian River Valley" preserved',
+      geoWines.some(
+        (w) =>
+          /acrobat/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          /pinot noir/i.test(w.varietal ?? '')
+      )
+    ],
+    [
+      'GEO: real wine "Chassagne-Montrachet / Domaine Leflaive" preserved',
+      geoWines.some((w) => /leflaive/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'GEO: real wine "Châteauneuf-du-Pape, Southern Rhône" preserved (with producer)',
+      geoWines.some((w) => /beaucastel/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'BEER: "Coors Light light lager" rejected',
+      !geoWines.some((w) => /coors/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'BEER: "Corona Extra mexican lager" rejected',
+      !geoWines.some((w) => /corona/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'BEER: "Stella Artois pilsner" rejected',
+      !geoWines.some((w) => /stella/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'BEER: "Guinness stout" rejected',
+      !geoWines.some((w) => /guinness/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'HARD SELTZER: "White Claw hard seltzer" rejected',
+      !geoWines.some((w) => /white claw/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'CIDER: "Angry Orchard hard cider" rejected',
+      !geoWines.some((w) => /angry orchard/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'COCKTAIL: "Aperol Spritz" rejected',
+      !geoWines.some((w) => /aperol spritz/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'COCKTAIL: "Classic Margarita" rejected',
+      !geoWines.some((w) => /margarita/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'COCKTAIL: "Espresso Martini" rejected',
+      !geoWines.some((w) => /martini/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'COCKTAIL: "Old Fashioned" rejected',
+      !geoWines.some((w) => /old fashioned/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'GEO+BEVERAGE: total wine count <= 5 (only real wines kept)',
+      geoWines.length > 0 && geoWines.length <= 5
     ]
   ];
 

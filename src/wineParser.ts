@@ -209,10 +209,31 @@ const FOOD_NEGATIVE_RE =
 const FOOD_SECTION_NAMES_RE =
   /\b(entr[eé]e|appetizer|salad|sandwich|side|raw bar|shellfish|sushi|kids?|antojito|combinations?|fajitas?|burritos?|tacos?|quesadillas?|on the grill)\b/i;
 
+// Beer / cider / hard seltzer / cocktail / non-wine beverage indicators.
+// Matched whole-word to avoid colliding with wine terms (e.g. "porter" only matches as a standalone word).
+const BEVERAGE_NEGATIVE_RE =
+  /\b(lager|ale|ales|ipa|i\.p\.a\.|pilsner|pilsener|stout|porter|hefeweizen|witbier|saison|kolsch|k[öo]lsch|amber ale|pale ale|brown ale|wheat beer|wheat ale|mexican lager|light lager|craft beer|draft beer|draught beer|cider|hard cider|hard seltzer|seltzer|cocktail|cocktails|margarita|martini|martinis|negroni|manhattan|old fashioned|mojito|daiquiri|spritz|aperol spritz|highball|sour mix|mule|moscow mule|paloma|caipirinha|gin and tonic|gin & tonic|vodka soda|whiskey sour|whisky sour|bloody mary|piña colada|pina colada|mai tai|tequila shot|rum and coke|jack and coke|bourbon|whiskey|whisky|tequila|mezcal|vodka|gin|rum|cognac|armagnac|grappa|absinthe|amaro|amari|aperitif|digestif|liqueur|schnapps|brandy|coors|corona|budweiser|bud light|miller lite|michelob|heineken|stella artois|guinness|modelo|pacifico|pacifico clara|dos equis|tecate|sapporo|asahi|kirin|tsingtao|peroni|moretti|amstel|carlsberg|pilsner urquell|spaten|paulaner|warsteiner|becks|hofbrau|grolsch|leffe|chimay|duvel|hoegaarden)\b/i;
+
 const NOISE_LINE_RE =
   /^(?:page \d+|continued|see reverse|all prices.*|prices subject.*|tax.*included|gratuity.*|menu \d+|wine list \d+|served by the (glass|bottle))$/i;
 
 const STATE_ABBR_RE = /^(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)$/;
+const STATE_ABBR_INLINE = `(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)`;
+
+// Geo-only fragment generic words: standalone tokens like "Coast, CA", "Valley, OR",
+// "Mountain, OR", "Hills, CA", or "<Word> <Word>, <STATE>" with no real producer/varietal.
+const GEO_GENERIC_WORDS_RE =
+  /\b(coast|valley|hills?|mountain|mountains|county|district|peninsula|ridge|river|highlands?|lowlands?|plateau|basin|appellation|region|area)\b/i;
+
+// Matches lines that are *only* a geographic fragment ending in a US state abbrev
+// (e.g. "Coast, CA", "Valley, OR", "Cooper Mountain, Valley, OR", "Russian River, CA").
+// Used together with absence of vintage/price/varietal/producer signals.
+const GEO_ONLY_FRAGMENT_RE = new RegExp(
+  `^[A-Za-z][A-Za-z\\s'’\\-\\.]{0,60},\\s*${STATE_ABBR_INLINE}\\.?$`
+);
+const GEO_ONLY_MULTI_FRAGMENT_RE = new RegExp(
+  `^[A-Za-z][A-Za-z\\s'’\\-\\.]{0,80},\\s*[A-Za-z][A-Za-z\\s'’\\-\\.]{0,40},\\s*${STATE_ABBR_INLINE}\\.?$`
+);
 
 function slugify(value: string): string {
   return value
@@ -382,11 +403,78 @@ function hasMeaningfulProducerText(text: string): boolean {
   return alphaWords >= 1;
 }
 
+function isBeverageNonWineLine(line: string): boolean {
+  // Reject obvious beer / cider / hard seltzer / cocktail / spirit rows.
+  // Skip if we already detect a wine varietal — varietals win over false positives.
+  if (detectVarietal(line)) return false;
+  return BEVERAGE_NEGATIVE_RE.test(line);
+}
+
+function stripPricesAndVintageForGeoCheck(line: string): string {
+  let s = line;
+  const deglued = splitGluedVintageBin(s);
+  s = deglued.line;
+  const binStripped = extractTrailingBin(s);
+  s = binStripped.name;
+  const priceStripped = extractTrailingPrices(s);
+  s = priceStripped.name;
+  s = s.replace(VINTAGE_RE, '').replace(NV_RE, '').replace(/\s{2,}/g, ' ').trim();
+  s = s.replace(/[,;]+$/g, '').trim();
+  return s;
+}
+
+function isGeoOnlyFragment(line: string): boolean {
+  // Decide if a line is *only* a geographic fragment (no producer, no wine name).
+  // We strip vintage/price/bin first, then test against geo-fragment shapes.
+  const stripped = stripPricesAndVintageForGeoCheck(line);
+  if (!stripped) return false;
+  if (detectVarietal(stripped)) return false;
+
+  const parts = stripped.split(/\s*,\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return false;
+
+  // Last token a US state abbreviation? Then all earlier tokens must look geo-generic
+  // (e.g. "Coast", "Valley", "Hills", "Cooper Mountain") or be known wine regions.
+  const lastIsState = STATE_ABBR_RE.test(parts[parts.length - 1].toUpperCase().replace(/\.$/, ''));
+  if (lastIsState) {
+    const earlier = parts.slice(0, -1);
+    if (earlier.length === 0) return true; // bare state
+    // Every earlier part is either a generic geo word, a known wine region, or a single short token.
+    const allGeoGeneric = earlier.every((p) => {
+      const lower = p.toLowerCase();
+      if (GEO_GENERIC_WORDS_RE.test(lower)) return true;
+      const detected = detectRegionAndCountry(p);
+      if (detected.region || detected.country) return true;
+      // Reject if it contains apparent producer words (more than 1 capitalized word that isn't a geo word).
+      return false;
+    });
+    if (allGeoGeneric) return true;
+  }
+
+  if (GEO_ONLY_FRAGMENT_RE.test(stripped)) {
+    const head = parts[0].toLowerCase();
+    if (GEO_GENERIC_WORDS_RE.test(head)) return true;
+    const detected = detectRegionAndCountry(parts[0]);
+    if (detected.region || detected.country) return true;
+  }
+  if (GEO_ONLY_MULTI_FRAGMENT_RE.test(stripped)) {
+    // e.g. "Cooper Mountain, Valley, OR" — head is generic mountain/valley, middle is generic.
+    const head = parts[0].toLowerCase();
+    const mid = parts[1].toLowerCase();
+    if (GEO_GENERIC_WORDS_RE.test(head) || GEO_GENERIC_WORDS_RE.test(mid)) return true;
+    if (GEO_GENERIC_WORDS_RE.test(head) && GEO_GENERIC_WORDS_RE.test(mid)) return true;
+  }
+
+  return false;
+}
+
 function looksLikeWineEntry(line: string): boolean {
   if (!line || line.length < 4) return false;
   if (FOOD_NEGATIVE_RE.test(line)) return false;
+  if (isBeverageNonWineLine(line)) return false;
   if (/^\(/.test(line)) return false;
   if (isLikelyBinOrNoiseLine(line)) return false;
+  if (isGeoOnlyFragment(line)) return false;
   const hasUpper = /[A-Z]/.test(line);
   if (!hasUpper) return false;
 
@@ -661,13 +749,22 @@ export function toWineEntries(parsed: ParsedWineList): WineEntry[] {
 }
 
 export function filterFoodNoise(entries: WineEntry[]): WineEntry[] {
+  const seen = new Set<string>();
   return entries.filter((e) => {
-    const blob = `${e.name} ${e.notes ?? ''}`;
+    const blob = `${e.producer ?? ''} ${e.name} ${e.notes ?? ''}`;
     if (FOOD_NEGATIVE_RE.test(blob)) return false;
+    if (isBeverageNonWineLine(blob)) return false;
     if (!e.name || e.name.length < 2) return false;
     if (/^\d+$/.test(e.name.replace(/\s+/g, ''))) return false;
     const letters = e.name.replace(/[^A-Za-z]/g, '');
     if (letters.length < 3) return false;
+    // Drop entries whose entire identity is a geo-only fragment (e.g. "Coast, CA").
+    const identity = `${e.producer ?? ''}, ${e.name}`.replace(/^,\s*/, '');
+    if (isGeoOnlyFragment(identity)) return false;
+    // De-duplicate identical fragment entries across sections.
+    const sig = `${(e.producer ?? '').toLowerCase().trim()}|${e.name.toLowerCase().trim()}|${e.vintage ?? ''}|${e.region ?? ''}|${e.country ?? ''}`;
+    if (seen.has(sig)) return false;
+    seen.add(sig);
     return true;
   });
 }
