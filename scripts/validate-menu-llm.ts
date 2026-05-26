@@ -19,7 +19,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
+  chunkMenuPages,
   extractMenuWithLlm,
+  mergeMenuExtractions,
+  pageLooksLikeMeal,
   toTableSommDishes,
   validateAndNormalizeMenu,
   type DishLlmRecord,
@@ -117,6 +120,13 @@ async function runPostProcessingTests(targetPath: string) {
   const target = JSON.parse(raw) as RawTarget;
   const targetMeals = getTargetMeals(target);
   const declaredCount = target.meal_count ?? targetMeals.length;
+
+  // 0. The Water Grill fixture must declare exactly 35 meals, matching the
+  //    ChatGPT target extraction. Other fixtures use a flexible count.
+  if (/water_grill_full_meals\.json$/i.test(targetPath)) {
+    assert(declaredCount === 35, `Water Grill fixture meal_count is 35 (got ${declaredCount})`);
+    assert(targetMeals.length === 35, `Water Grill fixture has 35 meals (got ${targetMeals.length})`);
+  }
 
   // 1. Round-trip through validator: should preserve every target meal.
   const normalized = validateAndNormalizeMenu(target, {
@@ -263,11 +273,32 @@ async function runPostProcessingTests(targetPath: string) {
     'multi-size object price preserved'
   );
 
-  // 8. TableSomm mapping preserves every meal and assigns category/section.
+  // 8. TableSomm mapping preserves every meal and assigns name, category,
+  //    section, description, and price for every dish.
   const dishes = toTableSommDishes(normalized);
   assert(dishes.length === normalized.meals.length, 'toTableSommDishes preserves count');
   const withoutCategory = dishes.filter((d) => !d.category || d.category === '');
   assert(withoutCategory.length === 0, 'every dish has a category');
+  const withoutSection = dishes.filter((d) => !d.section || d.section === '');
+  assert(withoutSection.length === 0, 'every dish has a section');
+  const nameMismatch = dishes.filter((d, i) => d.name !== normalized.meals[i].name);
+  assert(nameMismatch.length === 0, 'TableSomm dish name matches full meal name');
+  const dishesWithTargetDesc = dishes.filter((d, i) => {
+    const want = normalized.meals[i].description;
+    if (!want) return true;
+    return d.description === want;
+  });
+  assert(
+    dishesWithTargetDesc.length === dishes.length,
+    'every TableSomm dish carries the target description verbatim'
+  );
+  const dishesWithMatchedPrice = dishes.filter((d, i) => {
+    return priceSnapshot(d.price as any) === priceSnapshot(normalized.meals[i].price);
+  });
+  assert(
+    dishesWithMatchedPrice.length === dishes.length,
+    'every TableSomm dish carries the meal price (number / string / object)'
+  );
   const leaked = dishes.filter((d) =>
     /^(menu|dinner|entrees?|raw bar|sides|desserts?|salads?|sandwiches?)$/i.test(d.name.trim())
   );
@@ -289,6 +320,142 @@ async function runPostProcessingTests(targetPath: string) {
   );
 
   return { normalized, dishes };
+}
+
+async function runChunkingTests() {
+  console.log('\n== Chunking / page-relevance tests ==');
+
+  // Mocked page text from a Water-Grill-style menu: cocktails page, raw bar
+  // page, salads + crustaceans page, entrees + steaks page. Only pages 3 and
+  // 4 should survive page-relevance filtering.
+  const cocktailsPage = `:: SPIRIT FREE ::\nFREE SPIRITED 16.50\n:: COCKTAILS ::\nBRISTOL STREET 17.00\n:: APPETIZERS ::\nCLAM CHOWDER 16\n:: SUSHI ::\nGARDEN ROLL 19`;
+  const rawBarPage = `ICED SHELLFISH PLATTERS\nKUMAMOTO OYSTERS 4.20\n:: RAW BAR ::\nWILD LITTLENECK CLAMS 3.40\n:: CHILLED SHELLFISH ::\nDUNGENESS CRAB 38`;
+  const saladsCrustaceansPage = `:: SALADS & SANDWICHES ::\nROASTED CHICKEN & BABY KALE SALAD 32\nWILD JUMBO SHRIMP LOUIE SALAD 35\nBACON CHEDDAR CHEESEBURGER 25\nNEW ENGLAND LOBSTER ROLL 38\n:: CRUSTACEANS ::\nWILD MARYLAND SOFT SHELL CRAB 53\nLIVE WILD NORTH AMERICAN HARD SHELL LOBSTER 38/POUND\nLIVE WILD SANTA BARBARA SPOT PRAWNS 62/3⁄4 POUND 82/POUND 122/1½ POUNDS\n:: WHOLE FISH ::\nCHARCOAL GRILLED OR WHOLE CRISPY FRIED`;
+  const entreesSteaksPage = `:: ENTREES ::\nWILD ICELANDIC COD FISH & CHIPS 37\nWILD PACIFIC BIGEYE TUNA 46\nCIOPPINO 45\n:: USDA PRIME STEAKS ::\nFILET MIGNON 6oz Petite Cut 58\nFILET MIGNON 8oz Center Cut 62\n:: WAGYU GOLD ::\nWAGYU FLIGHT 105`;
+
+  assert(!pageLooksLikeMeal(cocktailsPage), 'pageLooksLikeMeal rejects cocktails / sushi page');
+  assert(!pageLooksLikeMeal(rawBarPage), 'pageLooksLikeMeal rejects raw-bar / shellfish-platter page');
+  assert(pageLooksLikeMeal(saladsCrustaceansPage), 'pageLooksLikeMeal keeps salads / crustaceans page');
+  assert(pageLooksLikeMeal(entreesSteaksPage), 'pageLooksLikeMeal keeps entrees / steaks page');
+
+  const pages = [cocktailsPage, rawBarPage, saladsCrustaceansPage, entreesSteaksPage];
+  const chunks = chunkMenuPages(pages);
+  assert(chunks.length === 2, `chunkMenuPages produces 2 chunks (got ${chunks.length})`);
+  const chunkedPageNumbers = chunks.flatMap((c) => c.pageNumbers).sort();
+  assert(
+    chunkedPageNumbers.join(',') === '3,4',
+    `chunkMenuPages keeps pages 3 and 4 (got ${chunkedPageNumbers.join(',')})`
+  );
+  for (const c of chunks) {
+    assert(c.text.includes('**page-'), 'chunk text labels source page numbers');
+  }
+
+  // mergeMenuExtractions should dedupe by (name, category) and union source_pages.
+  const a = validateAndNormalizeMenu(
+    {
+      source_file: 'x',
+      meals: [
+        { name: 'Wild Eastern Sea Scallops', category: 'Entrees', price: 49, source_pages: [3] },
+        { name: 'Cioppino', category: 'Entrees', price: 45, source_pages: [3] }
+      ]
+    },
+    { sourceFile: 'x' }
+  );
+  const b = validateAndNormalizeMenu(
+    {
+      source_file: 'x',
+      meals: [
+        // Same dish from another chunk — should merge by (name, category).
+        { name: 'Wild Eastern Sea Scallops', category: 'Entrees', price: 49, source_pages: [4] },
+        { name: 'Filet Mignon 6oz Petite Cut', category: 'USDA Prime Steaks', price: 58, source_pages: [4] }
+      ]
+    },
+    { sourceFile: 'x' }
+  );
+  const merged = mergeMenuExtractions([a, b], { sourceFile: 'x' });
+  assert(merged.meals.length === 3, `merge dedupes to 3 distinct meals (got ${merged.meals.length})`);
+  const scallops = merged.meals.find((m) => m.name === 'Wild Eastern Sea Scallops')!;
+  assert(
+    (scallops.source_pages ?? []).join(',') === '3,4',
+    'merge unions source_pages across chunks for duplicates'
+  );
+}
+
+async function runMockedExtractionTest() {
+  console.log('\n== Mocked end-to-end chunked extraction ==');
+  // Fake OpenAI fetch that returns a per-chunk JSON payload keyed on page numbers
+  // found in the prompt. This mirrors what the live LLM would emit for each
+  // chunk and lets us assert the chunk plumbing + merge produce a 35-meal
+  // result without making a real API call.
+  const TARGET = JSON.parse(
+    await fs.readFile(path.resolve('scripts/fixtures/water_grill_full_meals.json'), 'utf8')
+  );
+  const targetMeals: any[] = Array.isArray(TARGET.meals) ? TARGET.meals : [];
+
+  // Synthetic 4-page input: pages 1+2 are noise; pages 3-4 contain meal text.
+  // The mock fetch ignores text content and routes by the **page-N** markers,
+  // emitting the matching slice of target meals per page.
+  const pages = [
+    ':: COCKTAILS ::\nBRISTOL STREET 17.00\n:: APPETIZERS ::\nCLAM CHOWDER 16\n:: SUSHI ::\nGARDEN ROLL 19',
+    'ICED SHELLFISH PLATTERS\nKUMAMOTO 4.20\n:: RAW BAR ::\nWILD LITTLENECK CLAMS 3.40',
+    ':: SALADS & SANDWICHES ::\nROASTED CHICKEN & BABY KALE SALAD 32\n:: CRUSTACEANS ::\nWILD MARYLAND SOFT SHELL CRAB 53\n:: WHOLE FISH ::\nWILD NEW ZEALAND PINK BREAM 38/lb',
+    ':: ENTREES ::\nCIOPPINO 45\n:: USDA PRIME STEAKS ::\nFILET MIGNON 6oz Petite Cut 58\n:: WAGYU GOLD ::\nWAGYU FLIGHT 105'
+  ];
+
+  // Split the target meals across pages 3 and 4 the way they appear on the
+  // real PDF: Crustaceans, Salads & Sandwiches, Whole Fish → page 3; First of
+  // Season, Entrees, Steaks, Wagyu → page 4.
+  const page3Categories = new Set(['Crustaceans', 'Salads & Sandwiches', 'Whole Fish']);
+  const page3Meals = targetMeals.filter((m) => page3Categories.has(m.category));
+  const page4Meals = targetMeals.filter((m) => !page3Categories.has(m.category));
+
+  const mockFetch: any = async (_url: string, init: any) => {
+    const body = JSON.parse(init.body);
+    const userContent = body.messages.find((m: any) => m.role === 'user').content as string;
+    const containsPage3 = /\*\*page-3\*\*/.test(userContent);
+    const containsPage4 = /\*\*page-4\*\*/.test(userContent);
+    const meals: any[] = [];
+    if (containsPage3) for (const m of page3Meals) meals.push({ ...m, source_pages: [3] });
+    if (containsPage4) for (const m of page4Meals) meals.push({ ...m, source_pages: [4] });
+    const payload = {
+      source_file: 'WaterGrillDinnermenu.pdf',
+      meal_count: meals.length,
+      meals
+    };
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      async text() {
+        return '';
+      },
+      async json() {
+        return { choices: [{ message: { content: JSON.stringify(payload) } }] };
+      }
+    };
+  };
+
+  const extraction = await extractMenuWithLlm({
+    sourceFile: 'WaterGrillDinnermenu.pdf',
+    pages,
+    apiKey: 'fake-test-key',
+    fetchImpl: mockFetch
+  });
+
+  assert(extraction.meal_count === 35, `mocked extraction returns 35 meals (got ${extraction.meal_count})`);
+  assert(extraction.meals.length === 35, 'mocked extraction meals array has 35 entries');
+  const names = extraction.meals.map((m) => m.name);
+  assert(names.includes('Wild Maryland Soft Shell Crab'), 'mocked extraction includes Crustaceans');
+  assert(names.includes('Cioppino'), 'mocked extraction includes Entrees');
+  assert(names.includes('Wagyu Flight'), 'mocked extraction includes Wagyu Gold');
+  assert(names.includes('Wild New Zealand Pink Bream'), 'mocked extraction includes Whole Fish');
+  const forbidden = ['Lobster Bisque', 'Oysters Rockefeller', 'Spicy Tuna Roll', 'Garden Roll', 'Bristol Street'];
+  for (const f of forbidden) {
+    assert(!names.includes(f), `mocked extraction excludes "${f}"`);
+  }
+
+  const dishes = toTableSommDishes(extraction);
+  assert(dishes.length === 35, `TableSomm mapping yields 35 dishes (got ${dishes.length})`);
 }
 
 async function runLiveTest(args: Args) {
@@ -330,6 +497,8 @@ async function main() {
   }
 
   await runPostProcessingTests(targetPath);
+  await runChunkingTests();
+  await runMockedExtractionTest();
   if (args.live) {
     await runLiveTest(args);
   }

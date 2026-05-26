@@ -71,20 +71,38 @@ export type TableSommDishLlm = {
   sourcePages?: number[];
 };
 
-export const MENU_LLM_PARSER_VERSION = '2.1.0-llm';
+export const MENU_LLM_PARSER_VERSION = '2.2.0-llm-chunked';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_EXTRACTION_SCOPE =
   'Only full meal items reasonably pairable with wine. Excludes cocktails, drinks, appetizers, sushi, snacks, raw bar items, shellfish platters, sides, soups, desserts, and other non-entree content.';
+
+// Chunking defaults — small dinner menus are typically 3-4 pages of ~3-4k chars.
+// One LLM call per food-relevant page keeps each prompt small and lets the model
+// focus on a single section family at a time (Crustaceans, Whole Fish, Entrees,
+// Steaks) instead of mixing them with the cocktail / sushi / raw-bar pages.
+const DEFAULT_PAGES_PER_CHUNK = 1;
+const DEFAULT_CHUNK_CHAR_TARGET = 5000;
+const DEFAULT_CHUNK_CONCURRENCY = 3;
 
 const SYSTEM_PROMPT = `You are an expert restaurant menu parser and structured-data extractor.
 You are given the raw extracted text of a restaurant FOOD menu (possibly with page markers).
 Your task: extract every distinct FULL MEAL item that could reasonably be paired with a glass
 or bottle of wine. Return raw JSON only.
 
+EXHAUSTIVE EXTRACTION — return EVERY qualifying meal you see in the input.
+Restaurants typically print 25-40 full meals across categories. Do not stop early.
+If a section is present (e.g. "ENTREES", "USDA PRIME STEAKS", "WAGYU GOLD",
+"WHOLE FISH", "CRUSTACEANS", "SALADS & SANDWICHES", "FIRST OF SEASON"),
+extract every distinct dish printed under that heading, including each numbered
+cut (e.g. each Filet Mignon size, each Wagyu Gold Filet Mignon size, each
+size/cut variation of Ribeye or New York). Each printed cut is a separate meal.
+
 INCLUDE — full meals such as:
 - Entrees and mains (fish, seafood, poultry, meat, pasta).
-- Whole fish offered as a main course.
-- Steaks (Filet Mignon, NY Strip, Ribeye, Wagyu, etc.).
+- Whole fish offered as a main course (one entry per fish species printed).
+- Steaks (Filet Mignon, NY Strip, Ribeye, Wagyu, etc.). Treat every printed
+  cut/size as its own meal — "Filet Mignon 6oz Petite Cut" and "Filet Mignon
+  8oz Center Cut" are two distinct meals.
 - Composed seafood mains (Cioppino, Shrimp Scampi, Scallops over puree, etc.).
 - Live / by-the-pound crustaceans served as a main (whole lobster, king crab,
   spot prawns, soft shell crab, etc.).
@@ -162,21 +180,139 @@ export type ExtractMenuOptions = LlmCallOptions & {
   extractionScope?: string;
   pages?: string[];
   rawText?: string;
+  /**
+   * Override the page-chunking target. Set to 0 / negative to disable chunking
+   * and send everything in one call (only useful for tiny inputs or tests).
+   */
+  pagesPerChunk?: number;
+  chunkCharTarget?: number;
+  /** Max concurrent LLM calls when processing chunks. */
+  concurrency?: number;
 };
 
 export function buildMenuUserPrompt(opts: {
   sourceFile: string;
   pages?: string[];
+  pageNumbers?: number[];
   rawText?: string;
 }): string {
   const header = `Source file: ${opts.sourceFile}\n\nExtract full meal items per the rules. Return raw JSON only.\n`;
   if (opts.pages && opts.pages.length > 0) {
     const blocks = opts.pages
-      .map((p, i) => `**page-${i + 1}**\n${p.trim()}`)
+      .map((p, i) => {
+        const pageNum = opts.pageNumbers ? opts.pageNumbers[i] : i + 1;
+        return `**page-${pageNum}**\n${p.trim()}`;
+      })
       .join('\n\n');
     return `${header}\n${blocks}`;
   }
   return `${header}\n${opts.rawText ?? ''}`;
+}
+
+/**
+ * Heuristic: does a page look like it contains full-meal entries (entrees,
+ * steaks, whole fish, composed seafood mains, lobster rolls, etc.)? Used to
+ * skip pages dominated by cocktails, spirits, raw-bar oysters, sushi rolls,
+ * and shellfish platters so we don't waste LLM tokens or invite false
+ * positives on those categories. Any uncertainty is resolved by INCLUDING
+ * the page.
+ */
+export function pageLooksLikeMeal(pageText: string): boolean {
+  if (!pageText || pageText.trim().length < 40) return false;
+  const lc = pageText.toLowerCase();
+
+  const mealCues = [
+    'entree',
+    'entrees',
+    'whole fish',
+    'crustacean',
+    'steak',
+    'wagyu',
+    'filet mignon',
+    'ribeye',
+    'ny strip',
+    'new york strip',
+    'salads & sandwiches',
+    'sandwiches',
+    'cioppino',
+    'scampi',
+    'scallops',
+    'halibut',
+    'salmon',
+    'sea bass',
+    'lobster roll',
+    'cheeseburger',
+    'first of season',
+    'usda prime'
+  ];
+  const mealHits = mealCues.reduce((n, kw) => n + (lc.includes(kw) ? 1 : 0), 0);
+
+  const nonMealCues = [
+    ':: cocktails ::',
+    ':: spirits ::',
+    ':: whiskey ::',
+    ':: bourbon ::',
+    ':: vodka ::',
+    ':: gin ::',
+    ':: rum ::',
+    ':: tequila ::',
+    ':: spirit free ::',
+    ':: spirits free ::',
+    ':: cans and bottles ::',
+    ':: draughts ::',
+    ':: raw bar ::',
+    ':: sushi ::',
+    ':: sushi rolls ::',
+    'iced shellfish platters',
+    'iced shellfish platter',
+    'chilled shellfish',
+    ':: chilled shellfish ::'
+  ];
+  const nonMealHits = nonMealCues.reduce((n, kw) => n + (lc.includes(kw) ? 1 : 0), 0);
+
+  // Reject if the page is dominated by drink/raw-bar/sushi headings and has
+  // no real entree cues.
+  if (nonMealHits >= 1 && mealHits === 0) return false;
+  return true;
+}
+
+export type MenuPageChunk = { pageNumbers: number[]; text: string };
+
+/**
+ * Group meal-relevant pages into chunks small enough for a single LLM JSON-mode
+ * call. Pages dominated by cocktails / raw bar / sushi are filtered out.
+ */
+export function chunkMenuPages(
+  pages: string[],
+  opts: { pagesPerChunk?: number; chunkCharTarget?: number } = {}
+): MenuPageChunk[] {
+  const pagesPerChunk = Math.max(1, opts.pagesPerChunk ?? DEFAULT_PAGES_PER_CHUNK);
+  const charTarget = Math.max(500, opts.chunkCharTarget ?? DEFAULT_CHUNK_CHAR_TARGET);
+  const chunks: MenuPageChunk[] = [];
+
+  let buf: { idx: number; text: string }[] = [];
+  let bufChars = 0;
+  const flush = () => {
+    if (buf.length === 0) return;
+    chunks.push({
+      pageNumbers: buf.map((b) => b.idx + 1),
+      text: buf.map((b) => `**page-${b.idx + 1}**\n${b.text.trim()}`).join('\n\n')
+    });
+    buf = [];
+    bufChars = 0;
+  };
+
+  for (let i = 0; i < pages.length; i++) {
+    const text = pages[i] ?? '';
+    if (!pageLooksLikeMeal(text)) continue;
+    if (buf.length > 0 && (buf.length >= pagesPerChunk || bufChars + text.length > charTarget)) {
+      flush();
+    }
+    buf.push({ idx: i, text });
+    bufChars += text.length;
+  }
+  flush();
+  return chunks;
 }
 
 export async function callOpenAi(
@@ -365,21 +501,142 @@ export function validateAndNormalizeMenu(
   };
 }
 
+/** Build a dedup key for a meal record so chunked extractions don't double up. */
+function mealDedupKey(rec: DishLlmRecord): string {
+  const name = rec.name.toLowerCase().replace(/[\s'"]+/g, ' ').trim();
+  const category = (rec.category ?? rec.section ?? '').toLowerCase().trim();
+  return `${name}|${category}`;
+}
+
+/**
+ * Merge several extractions into one, deduping meals by (name, category) and
+ * unioning source_pages for matching entries.
+ */
+export function mergeMenuExtractions(
+  parts: MenuLlmExtraction[],
+  opts: { sourceFile: string; extractionScope?: string }
+): MenuLlmExtraction {
+  const byKey = new Map<string, DishLlmRecord>();
+  for (const part of parts) {
+    for (const m of part.meals) {
+      const key = mealDedupKey(m);
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, { ...m, source_pages: [...(m.source_pages ?? [])] });
+      } else {
+        const pages = new Set([...(existing.source_pages ?? []), ...(m.source_pages ?? [])]);
+        existing.source_pages = Array.from(pages).sort((a, b) => a - b);
+        if (!existing.description && m.description) existing.description = m.description;
+        if (!existing.category && m.category) existing.category = m.category;
+        if (!existing.section && m.section) existing.section = m.section;
+        if (existing.price == null && m.price != null) existing.price = m.price;
+      }
+    }
+  }
+  const meals = Array.from(byKey.values());
+  return {
+    source_file: opts.sourceFile,
+    extraction_scope: opts.extractionScope ?? DEFAULT_EXTRACTION_SCOPE,
+    meal_count: meals.length,
+    dish_count: meals.length,
+    meals,
+    dishes: meals
+  };
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const max = Math.max(1, limit);
+  const runners: Promise<void>[] = [];
+  for (let r = 0; r < Math.min(max, items.length); r++) {
+    runners.push(
+      (async () => {
+        while (true) {
+          const i = next++;
+          if (i >= items.length) return;
+          results[i] = await worker(items[i], i);
+        }
+      })()
+    );
+  }
+  await Promise.all(runners);
+  return results;
+}
+
 export async function extractMenuWithLlm(opts: ExtractMenuOptions): Promise<MenuLlmExtraction> {
-  const userPrompt = buildMenuUserPrompt({
-    sourceFile: opts.sourceFile,
-    pages: opts.pages,
-    rawText: opts.rawText
-  });
-  const content = await callOpenAi(
-    [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ],
-    opts
+  const { pages, pagesPerChunk, chunkCharTarget } = opts;
+  const useChunking =
+    pages && pages.length > 0 && (pagesPerChunk ?? DEFAULT_PAGES_PER_CHUNK) > 0;
+
+  if (!useChunking) {
+    const userPrompt = buildMenuUserPrompt({
+      sourceFile: opts.sourceFile,
+      pages,
+      rawText: opts.rawText
+    });
+    const content = await callOpenAi(
+      [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      opts
+    );
+    const parsed = parseLlmJson(content);
+    return validateAndNormalizeMenu(parsed, {
+      sourceFile: opts.sourceFile,
+      extractionScope: opts.extractionScope
+    });
+  }
+
+  const chunks = chunkMenuPages(pages, { pagesPerChunk, chunkCharTarget });
+  if (chunks.length === 0) {
+    return {
+      source_file: opts.sourceFile,
+      extraction_scope: opts.extractionScope ?? DEFAULT_EXTRACTION_SCOPE,
+      meal_count: 0,
+      dish_count: 0,
+      meals: [],
+      dishes: []
+    };
+  }
+
+  const partials = await runWithConcurrency(
+    chunks,
+    opts.concurrency ?? DEFAULT_CHUNK_CONCURRENCY,
+    async (chunk) => {
+      const chunkPagesText = chunk.pageNumbers.map((n) => pages[n - 1] ?? '');
+      const userPrompt = buildMenuUserPrompt({
+        sourceFile: opts.sourceFile,
+        pages: chunkPagesText,
+        pageNumbers: chunk.pageNumbers
+      });
+      const content = await callOpenAi(
+        [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt }
+        ],
+        opts
+      );
+      const parsed = parseLlmJson(content);
+      const part = validateAndNormalizeMenu(parsed, {
+        sourceFile: opts.sourceFile,
+        extractionScope: opts.extractionScope
+      });
+      for (const m of part.meals) {
+        if (!m.source_pages || m.source_pages.length === 0) {
+          m.source_pages = [...chunk.pageNumbers];
+        }
+      }
+      return part;
+    }
   );
-  const parsed = parseLlmJson(content);
-  return validateAndNormalizeMenu(parsed, {
+
+  return mergeMenuExtractions(partials, {
     sourceFile: opts.sourceFile,
     extractionScope: opts.extractionScope
   });
@@ -433,4 +690,11 @@ export function toTableSommDishes(extraction: MenuLlmExtraction): TableSommDishL
   return extraction.meals.map((d, i) => toTableSommDish(d, i));
 }
 
-export { DEFAULT_EXTRACTION_SCOPE, DEFAULT_MODEL, SYSTEM_PROMPT };
+export {
+  DEFAULT_EXTRACTION_SCOPE,
+  DEFAULT_MODEL,
+  DEFAULT_PAGES_PER_CHUNK,
+  DEFAULT_CHUNK_CHAR_TARGET,
+  DEFAULT_CHUNK_CONCURRENCY,
+  SYSTEM_PROMPT
+};
