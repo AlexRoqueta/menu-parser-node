@@ -235,6 +235,143 @@ const GEO_ONLY_MULTI_FRAGMENT_RE = new RegExp(
   `^[A-Za-z][A-Za-z\\s'’\\-\\.]{0,80},\\s*[A-Za-z][A-Za-z\\s'’\\-\\.]{0,40},\\s*${STATE_ABBR_INLINE}\\.?$`
 );
 
+// Known appellation / region heading patterns that frequently appear as bare
+// section sub-headings on wine lists. When a line is *only* one of these (after
+// stripping prices/vintage/bin), reject it as a wine record — it carries no
+// producer or bottle info on its own.
+const APPELLATION_HEADING_RE: RegExp[] = [
+  // France — Bordeaux subregions and right-bank appellations
+  /^saint[\s.\-]?[ée]milion(?:\s+grand\s+cru(?:\s+class[ée])?)?$/i,
+  /^st[\s.\-]?[ée]milion(?:\s+grand\s+cru(?:\s+class[ée])?)?$/i,
+  /^saint[\s.\-]?est[èe]phe$/i,
+  /^st[\s.\-]?est[èe]phe$/i,
+  /^saint[\s.\-]?julien$/i,
+  /^st[\s.\-]?julien$/i,
+  /^pauillac$/i,
+  /^margaux$/i,
+  /^pomerol$/i,
+  /^p[ée]ssac[\s-]?l[ée]ognan$/i,
+  /^graves$/i,
+  /^haut[\s-]?m[ée]doc$/i,
+  /^m[ée]doc$/i,
+  /^sauternes$/i,
+  /^barsac$/i,
+  // France — Burgundy / Bourgogne villages
+  /^chassagne[\s-]?montrachet$/i,
+  /^puligny[\s-]?montrachet$/i,
+  /^meursault$/i,
+  /^pommard$/i,
+  /^volnay$/i,
+  /^gevrey[\s-]?chambertin$/i,
+  /^vosne[\s-]?roman[ée]e$/i,
+  /^nuits[\s-]?saint[\s-]?georges$/i,
+  /^chambolle[\s-]?musigny$/i,
+  /^morey[\s-]?saint[\s-]?denis$/i,
+  /^aloxe[\s-]?corton$/i,
+  /^savigny[\s-]?l[èe]s[\s-]?beaune$/i,
+  /^beaune$/i,
+  /^chablis(?:\s+(?:premier|grand)\s+cru)?$/i,
+  /^mâcon(?:[\s-]?villages)?$/i,
+  /^macon(?:[\s-]?villages)?$/i,
+  /^pouilly[\s-]?fuiss[ée]$/i,
+  // France — Rhône
+  /^ch[âa]teauneuf[\s-]?du[\s-]?pape$/i,
+  /^c[ôo]te[\s-]?r[ôo]tie$/i,
+  /^hermitage$/i,
+  /^crozes[\s-]?hermitage$/i,
+  /^cornas$/i,
+  /^saint[\s.\-]?joseph$/i,
+  /^st[\s.\-]?joseph$/i,
+  /^condrieu$/i,
+  /^gigondas$/i,
+  /^vacqueyras$/i,
+  /^c[ôo]tes[\s-]?du[\s-]?rh[ôo]ne$/i,
+  // France — Loire / Alsace / Champagne / Beaujolais
+  /^sancerre$/i,
+  /^pouilly[\s-]?fum[ée]$/i,
+  /^vouvray$/i,
+  /^chinon$/i,
+  /^muscadet(?:[\s-]s[èe]vre[\s-]?et[\s-]?maine)?$/i,
+  /^savenni[èe]res$/i,
+  /^alsace$/i,
+  /^champagne$/i,
+  /^beaujolais(?:[\s-]?villages)?$/i,
+  /^morgon$/i,
+  /^fleurie$/i,
+  /^moulin[\s-]?[àa][\s-]?vent$/i,
+  // Italy
+  /^barolo$/i,
+  /^barbaresco$/i,
+  /^brunello(?:\s+di\s+montalcino)?$/i,
+  /^chianti(?:\s+classico(?:\s+riserva)?)?$/i,
+  /^vino\s+nobile(?:\s+di\s+montepulciano)?$/i,
+  /^amarone(?:\s+della\s+valpolicella)?$/i,
+  /^valpolicella(?:\s+(?:classico|ripasso|superiore))?$/i,
+  /^soave(?:\s+classico)?$/i,
+  /^etna(?:\s+(?:rosso|bianco))?$/i,
+  // Spain / Portugal
+  /^rioja(?:\s+(?:reserva|gran\s+reserva|crianza))?$/i,
+  /^ribera\s+del\s+duero$/i,
+  /^priorat$/i,
+  /^r[ií]as\s+baixas$/i,
+  /^douro$/i,
+  /^vinho\s+verde$/i,
+  // Germany / Austria
+  /^mosel$/i,
+  /^rheingau$/i,
+  /^wachau$/i,
+  // USA — AVAs commonly used as headings on wine lists
+  /^russian\s+river(?:\s+valley)?(?:,\s*ca)?$/i,
+  /^rutherford(?:,\s*ca)?$/i,
+  /^oakville(?:,\s*ca)?$/i,
+  /^stags?\s+leap(?:\s+district)?(?:,\s*ca)?$/i,
+  /^howell\s+mountain(?:,\s*ca)?$/i,
+  /^spring\s+mountain(?:,\s*ca)?$/i,
+  /^mount\s+veeder(?:,\s*ca)?$/i,
+  /^diamond\s+mountain(?:,\s*ca)?$/i,
+  /^calistoga(?:,\s*ca)?$/i,
+  /^st\.?\s*helena(?:,\s*ca)?$/i,
+  /^yountville(?:,\s*ca)?$/i,
+  /^carneros(?:,\s*ca)?$/i,
+  /^anderson\s+valley(?:,\s*ca)?$/i,
+  /^dry\s+creek(?:\s+valley)?(?:,\s*ca)?$/i,
+  /^alexander\s+valley(?:,\s*ca)?$/i,
+  /^knights\s+valley(?:,\s*ca)?$/i,
+  /^chalk\s+hill(?:,\s*ca)?$/i,
+  /^fort\s+ross[\s-]?seaview(?:,\s*ca)?$/i,
+  /^sonoma\s+coast(?:,\s*ca)?$/i,
+  /^sonoma\s+valley(?:,\s*ca)?$/i,
+  /^green\s+valley(?:\s+of\s+russian\s+river)?(?:,\s*ca)?$/i,
+  /^sta\.?\s*rita\s+hills(?:,\s*ca)?$/i,
+  /^santa\s+rita\s+hills(?:,\s*ca)?$/i,
+  /^santa\s+lucia\s+highlands(?:,\s*ca)?$/i,
+  /^santa\s+barbara(?:\s+county)?(?:,\s*ca)?$/i,
+  /^santa\s+maria\s+valley(?:,\s*ca)?$/i,
+  /^santa\s+ynez(?:\s+valley)?(?:,\s*ca)?$/i,
+  /^paso\s+robles(?:,\s*ca)?$/i,
+  /^adelaida(?:\s+district)?(?:,\s*ca)?$/i,
+  /^willamette(?:\s+valley)?(?:,\s*or)?$/i,
+  /^dundee\s+hills(?:,\s*or)?$/i,
+  /^eola[\s-]?amity\s+hills(?:,\s*or)?$/i,
+  /^columbia\s+valley(?:,\s*wa)?$/i,
+  /^walla\s+walla(?:\s+valley)?(?:,\s*wa)?$/i,
+  /^red\s+mountain(?:,\s*wa)?$/i,
+  /^finger\s+lakes(?:,\s*ny)?$/i,
+  /^napa\s+valley(?:,\s*ca)?$/i,
+  // Argentina / Chile / etc.
+  /^mendoza$/i,
+  /^uco\s+valley$/i
+];
+
+function isKnownAppellationHeading(line: string): boolean {
+  const trimmed = line.replace(/[.,;]+$/g, '').trim();
+  if (!trimmed) return false;
+  for (const re of APPELLATION_HEADING_RE) {
+    if (re.test(trimmed)) return true;
+  }
+  return false;
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -468,6 +605,50 @@ function isGeoOnlyFragment(line: string): boolean {
   return false;
 }
 
+function stripGeoTokensForResidueCheck(text: string): string {
+  let s = text;
+  // Strip known region matches (any country).
+  for (const key of Object.keys(COUNTRY_REGIONS)) {
+    const { country, regions } = COUNTRY_REGIONS[key];
+    for (const re of regions) {
+      s = s.replace(re, ' ');
+    }
+    s = s.replace(new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi'), ' ');
+  }
+  // Strip US state abbreviations as standalone tokens.
+  s = s.replace(
+    new RegExp(`\\b${STATE_ABBR_INLINE}\\b\\.?`, 'g'),
+    ' '
+  );
+  // Strip generic geo words.
+  s = s.replace(GEO_GENERIC_WORDS_RE, ' ');
+  // Strip appellation heading patterns (anchored versions wouldn't match
+  // inline, so we test the whole stripped text against the unanchored forms
+  // by replacing common appellation names explicitly).
+  const APPELLATION_INLINE_RE = [
+    /\bsaint[\s.\-]?[ée]milion(?:\s+grand\s+cru(?:\s+class[ée])?)?\b/gi,
+    /\bst[\s.\-]?[ée]milion(?:\s+grand\s+cru(?:\s+class[ée])?)?\b/gi,
+    /\bsaint[\s.\-]?est[èe]phe\b/gi,
+    /\bst[\s.\-]?est[èe]phe\b/gi,
+    /\bchassagne[\s-]?montrachet\b/gi,
+    /\bpuligny[\s-]?montrachet\b/gi,
+    /\bch[âa]teauneuf[\s-]?du[\s-]?pape\b/gi,
+    /\bsancerre\b/gi,
+    /\brutherford\b/gi,
+    /\boakville\b/gi,
+    /\bpauillac\b/gi,
+    /\bmargaux\b/gi,
+    /\bpomerol\b/gi,
+    /\bbarolo\b/gi,
+    /\bbarbaresco\b/gi,
+    /\bchianti(?:\s+classico(?:\s+riserva)?)?\b/gi,
+    /\bbrunello(?:\s+di\s+montalcino)?\b/gi,
+    /\brioja(?:\s+(?:reserva|gran\s+reserva|crianza))?\b/gi
+  ];
+  for (const re of APPELLATION_INLINE_RE) s = s.replace(re, ' ');
+  return s.replace(/[,;]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function looksLikeWineEntry(line: string): boolean {
   if (!line || line.length < 4) return false;
   if (FOOD_NEGATIVE_RE.test(line)) return false;
@@ -496,6 +677,33 @@ function looksLikeWineEntry(line: string): boolean {
     return false;
   }
 
+  // Reject any line that — after stripping vintage/price/bin — is a known
+  // appellation/region heading on its own (e.g. "Sancerre", "Saint-Émilion
+  // Grand Cru", "Russian River Valley, CA", "Chassagne-Montrachet",
+  // "Châteauneuf-du-Pape, Southern Rhône"). These carry no producer info.
+  if (!hasVintage && !hasPrice && !hasVarietal) {
+    const headingCandidate = candidate.replace(/[,;]+\s*$/g, '').trim();
+    if (isKnownAppellationHeading(headingCandidate)) return false;
+
+    // Also handle "Appellation, Sub-Region" pairs where the second part is a
+    // known region/country and the first part is an appellation heading.
+    const parts = headingCandidate.split(/\s*,\s*/).filter(Boolean);
+    if (parts.length >= 1 && isKnownAppellationHeading(parts[0])) {
+      const rest = parts.slice(1).join(' ').trim();
+      if (!rest) return false;
+      // If every remaining part is itself a geo/region/country/state, reject.
+      const restParts = parts.slice(1);
+      const allGeoRest = restParts.every((p) => {
+        const cleaned = p.replace(/\.$/, '').toUpperCase();
+        if (STATE_ABBR_RE.test(cleaned)) return true;
+        if (GEO_GENERIC_WORDS_RE.test(p)) return true;
+        const det = detectRegionAndCountry(p);
+        return Boolean(det.region || det.country);
+      });
+      if (allGeoRest) return false;
+    }
+  }
+
   const evidenceCount =
     (hasVintage ? 1 : 0) +
     (hasPrice ? 1 : 0) +
@@ -505,20 +713,21 @@ function looksLikeWineEntry(line: string): boolean {
   if (evidenceCount === 0) return false;
 
   if (hasGeo && !hasVintage && !hasPrice && !hasVarietal) {
-    let textAfterGeo = candidate;
-    if (region) {
-      textAfterGeo = textAfterGeo.replace(
-        new RegExp(`\\b${region.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
-        ''
-      );
-    }
-    if (country) {
-      textAfterGeo = textAfterGeo.replace(
-        new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
-        ''
-      );
-    }
-    if (!hasMeaningfulProducerText(textAfterGeo)) return false;
+    // Strip ALL geo tokens (known regions, country names, state abbrevs,
+    // generic geo words, and well-known appellations) and require what's
+    // left to still contain meaningful producer text. This catches things
+    // like "Russian River Valley, CA" where "Valley" survived the previous
+    // narrower strip.
+    const residue = stripGeoTokensForResidueCheck(candidate);
+    if (!hasMeaningfulProducerText(residue)) return false;
+    // Require at least 2 alpha tokens of length >= 3 in the residue — a
+    // real producer name almost always has at least two such tokens (e.g.
+    // "Domaine Leflaive", "Sea Smoke") whereas appellation-leftovers tend
+    // to have at most one.
+    const residueTokens = residue.split(/\s+/).filter(
+      (t) => /^[A-Za-z][A-Za-z'’\-]*$/.test(t) && t.length >= 3 && !STATE_ABBR_RE.test(t.toUpperCase())
+    );
+    if (residueTokens.length < 2) return false;
   }
 
   return true;
@@ -703,6 +912,15 @@ export function parseWineText(text: string, sourceFile: string): ParsedWineList 
       }
     }
 
+    // If this line is itself a non-wine beverage (beer/cocktail/spirit) or
+    // food line, treat it as a section break and clear lastEntry so we don't
+    // pollute the previous wine's notes with beer/cocktail strings (which
+    // would later cause filterFoodNoise to drop the real wine).
+    if (isBeverageNonWineLine(line) || FOOD_NEGATIVE_RE.test(line) || FOOD_SECTION_NAMES_RE.test(line)) {
+      lastEntry = null;
+      continue;
+    }
+
     if (lastEntry && /[a-z]/.test(line) && !classifySection(line)) {
       const region = detectRegionAndCountry(line);
       if (region.region && !lastEntry.region) lastEntry.region = region.region;
@@ -761,6 +979,28 @@ export function filterFoodNoise(entries: WineEntry[]): WineEntry[] {
     // Drop entries whose entire identity is a geo-only fragment (e.g. "Coast, CA").
     const identity = `${e.producer ?? ''}, ${e.name}`.replace(/^,\s*/, '');
     if (isGeoOnlyFragment(identity)) return false;
+    // Drop entries that have no producer, no vintage, no price, no varietal
+    // and whose name (or producer+name) is a known appellation/region
+    // heading like "Sancerre", "Saint-Émilion Grand Cru", "Russian River
+    // Valley, CA", "Chassagne-Montrachet". These are pure list section
+    // sub-headings, not wine records.
+    const hasBottleEvidence = Boolean(
+      e.vintage || e.price || e.glassPrice || e.bottlePrice || e.varietal || e.binNumber
+    );
+    if (!hasBottleEvidence) {
+      if (isKnownAppellationHeading(e.name)) return false;
+      const combined = identity.replace(/[.,;]+$/g, '').trim();
+      if (isKnownAppellationHeading(combined)) return false;
+      // Strip the wine name's geo residue: if nothing producer-like remains,
+      // reject. Catches "Russian River Valley, CA" with no other info.
+      const residue = stripGeoTokensForResidueCheck(
+        `${e.producer ?? ''} ${e.name}`.trim()
+      );
+      const residueTokens = residue.split(/\s+/).filter(
+        (t) => /^[A-Za-z][A-Za-z'’\-]*$/.test(t) && t.length >= 3 && !STATE_ABBR_RE.test(t.toUpperCase())
+      );
+      if (residueTokens.length < 2) return false;
+    }
     // De-duplicate identical fragment entries across sections.
     const sig = `${(e.producer ?? '').toLowerCase().trim()}|${e.name.toLowerCase().trim()}|${e.vintage ?? ''}|${e.region ?? ''}|${e.country ?? ''}`;
     if (seen.has(sig)) return false;

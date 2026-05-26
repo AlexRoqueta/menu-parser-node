@@ -98,6 +98,43 @@ Espresso Martini 16
 Old Fashioned 17
 `;
 
+// Mirrors the production screenshot: many appellation/region heading-only
+// lines, repeated geo rows, and a handful of real wines that use an
+// appellation as the wine name but have producer/vintage/price context.
+const APPELLATION_HEADING_NOISE = `
+WINE LIST
+
+RED
+Russian River Valley, CA
+Russian River Valley, CA
+Russian River, CA
+Russian River, CA
+Rutherford, CA
+Sancerre
+Saint-Émilion Grand Cru
+Saint-Estèphe
+Chassagne-Montrachet
+Châteauneuf-du-Pape
+Pauillac
+Margaux
+Pomerol
+Barolo
+Brunello di Montalcino
+Chianti Classico Riserva
+
+WHITE
+Domaine Vacheron, Sancerre, Loire, France 2021 110
+Domaine Leflaive, Chassagne-Montrachet, Burgundy, France 2019 285
+Château de Beaucastel, Châteauneuf-du-Pape, Southern Rhône, France 2018 220
+Château Cheval Blanc, Saint-Émilion Grand Cru, Bordeaux, France 2016 950
+Château Cos d'Estournel, Saint-Estèphe, Bordeaux, France 2015 425
+Château Margaux, Margaux, Bordeaux, France 2014 1200
+Château Pichon Baron, Pauillac, Bordeaux, France 2017 380
+Acrobat, Pinot Noir, Russian River Valley, CA 2023 179
+Inglenook, Cabernet Sauvignon, Rutherford, CA 2018 245
+Giacomo Conterno, Monfortino Riserva, Barolo, Italy 2014 1500
+`;
+
 function runSample(label: string, source: string) {
   const parsed = parseWineText(source, `${label}.txt`);
   const wines = filterFoodNoise(toWineEntries(parsed));
@@ -127,6 +164,10 @@ function main() {
   const { parsed: geoParsed, wines: geoWines } = runSample(
     'GEO_AND_BEVERAGE_NOISE',
     GEO_AND_BEVERAGE_NOISE
+  );
+  const { parsed: headingParsed, wines: headingWines } = runSample(
+    'APPELLATION_HEADING_NOISE',
+    APPELLATION_HEADING_NOISE
   );
 
   console.log('\n=== Sample entries (first 3) ===');
@@ -335,6 +376,223 @@ function main() {
     [
       'GEO+BEVERAGE: total wine count <= 5 (only real wines kept)',
       geoWines.length > 0 && geoWines.length <= 5
+    ],
+
+    // Appellation/region heading-only false-positive cases mirroring the
+    // production screenshot (Russian River Valley CA, Sancerre, Saint-Émilion
+    // Grand Cru, Saint-Estèphe, Chassagne-Montrachet, Châteauneuf-du-Pape...)
+    [
+      'HEADING: bare "Russian River Valley, CA" rejected',
+      !headingWines.some(
+        (w) =>
+          /russian river/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          !w.varietal &&
+          !w.producer &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Russian River, CA" rejected',
+      !headingWines.some(
+        (w) =>
+          /^russian river,?\s*ca?$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Rutherford, CA" rejected',
+      !headingWines.some(
+        (w) =>
+          /^rutherford,?\s*ca?$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Sancerre" rejected',
+      !headingWines.some(
+        (w) =>
+          /^sancerre$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Saint-Émilion Grand Cru" rejected',
+      !headingWines.some(
+        (w) =>
+          /^saint[\s.\-]?[ée]milion(\s+grand\s+cru)?$/i.test(
+            `${w.producer ?? ''} ${w.name}`.trim()
+          ) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Saint-Estèphe" rejected',
+      !headingWines.some(
+        (w) =>
+          /^saint[\s.\-]?est[èe]phe$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Chassagne-Montrachet" rejected',
+      !headingWines.some(
+        (w) =>
+          /^chassagne[\s-]?montrachet$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Châteauneuf-du-Pape" rejected',
+      !headingWines.some(
+        (w) =>
+          /^ch[âa]teauneuf[\s-]?du[\s-]?pape$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Pauillac" rejected',
+      !headingWines.some(
+        (w) =>
+          /^pauillac$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Margaux" rejected',
+      !headingWines.some(
+        (w) =>
+          /^margaux$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Pomerol" rejected',
+      !headingWines.some(
+        (w) =>
+          /^pomerol$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Barolo" rejected',
+      !headingWines.some(
+        (w) =>
+          /^barolo$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Brunello di Montalcino" rejected',
+      !headingWines.some(
+        (w) =>
+          /^brunello(\s+di\s+montalcino)?$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: bare "Chianti Classico Riserva" rejected',
+      !headingWines.some(
+        (w) =>
+          /^chianti(\s+classico(\s+riserva)?)?$/i.test(
+            `${w.producer ?? ''} ${w.name}`.trim()
+          ) &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'HEADING: repeated "Russian River Valley, CA" de-duplicated (no duplicate ghost wines)',
+      headingWines.filter(
+        (w) =>
+          /russian river/i.test(`${w.producer ?? ''} ${w.name}`) && !w.varietal && !w.producer && !w.vintage
+      ).length === 0
+    ],
+
+    // Preservation cases — real wines that use an appellation as the wine
+    // name but have producer + vintage + price context. These MUST survive.
+    [
+      'PRESERVE: "Domaine Vacheron / Sancerre" preserved',
+      headingWines.some(
+        (w) =>
+          /vacheron/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          w.vintage === 2021
+      )
+    ],
+    [
+      'PRESERVE: "Domaine Leflaive / Chassagne-Montrachet" preserved',
+      headingWines.some(
+        (w) =>
+          /leflaive/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          w.vintage === 2019
+      )
+    ],
+    [
+      'PRESERVE: "Beaucastel / Châteauneuf-du-Pape" preserved',
+      headingWines.some(
+        (w) => /beaucastel/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2018
+      )
+    ],
+    [
+      'PRESERVE: "Cheval Blanc / Saint-Émilion Grand Cru" preserved',
+      headingWines.some(
+        (w) => /cheval blanc/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2016
+      )
+    ],
+    [
+      'PRESERVE: "Cos d\'Estournel / Saint-Estèphe" preserved',
+      headingWines.some(
+        (w) =>
+          /cos d.estournel/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2015
+      )
+    ],
+    [
+      'PRESERVE: "Château Margaux / Margaux" preserved',
+      headingWines.some(
+        (w) => /margaux/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2014
+      )
+    ],
+    [
+      'PRESERVE: "Pichon Baron / Pauillac" preserved',
+      headingWines.some(
+        (w) => /pichon/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2017
+      )
+    ],
+    [
+      'PRESERVE: "Acrobat / Russian River Valley" preserved',
+      headingWines.some(
+        (w) =>
+          /acrobat/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          /pinot noir/i.test(w.varietal ?? '')
+      )
+    ],
+    [
+      'PRESERVE: "Inglenook / Rutherford" preserved',
+      headingWines.some(
+        (w) => /inglenook/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2018
+      )
+    ],
+    [
+      'PRESERVE: "Conterno / Barolo" preserved',
+      headingWines.some(
+        (w) => /conterno/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2014
+      )
+    ],
+    [
+      'HEADING: total wines in heading-noise sample is ~10 (only real wines kept)',
+      headingWines.length >= 8 && headingWines.length <= 12
     ]
   ];
 
