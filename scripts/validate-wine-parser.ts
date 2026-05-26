@@ -35,21 +35,70 @@ Caesar Salad 18
 New England Lobster Roll 32
 `;
 
-function main() {
-  const parsed = parseWineText(SAMPLE_WINE_LIST, 'sample-wine-list.txt');
-  const wines = filterFoodNoise(toWineEntries(parsed));
+const NOISY_WINE_LIST = `
+WINE LIST
 
-  console.log('=== Parsed sections ===');
+RED
+Acrobat, Pinot Noir, Russian River Valley, CA 2023 179
+201795
+201974
+202082
+Adelaida District, CA 2020 100
+Sea Smoke, Pinot Noir, Sta. Rita Hills, USA 2021 245
+123456
+Bin #4502
+Page 12
+
+WHITE
+Far Niente, Chardonnay, Napa Valley, CA 2022 185
+2023 195
+CA
+USA
+9999
+`;
+
+const GLUED_NUMBERS_WINE_LIST = `
+WINE LIST
+
+RED
+Acrobat, Pinot Noir, Russian River Valley, CA 2023179
+Justin, Cabernet Sauvignon, Adelaida District, CA 2020100
+Caymus, Cabernet Sauvignon, Napa Valley, USA 2020 165
+`;
+
+function runSample(label: string, source: string) {
+  const parsed = parseWineText(source, `${label}.txt`);
+  const wines = filterFoodNoise(toWineEntries(parsed));
+  console.log(`\n=== ${label} ===`);
   for (const sec of parsed.sections) {
     console.log(`[${sec.category}] ${sec.section} (${sec.items.length} items)`);
     for (const it of sec.items) {
-      console.log(`  - ${it.producer ?? ''} | ${it.name} | vintage=${it.vintage} | varietal=${it.varietal ?? ''} | region=${it.region ?? ''} | country=${it.country ?? ''} | g=${it.glassPrice ?? '-'} b=${it.bottlePrice ?? '-'} p=${it.price ?? '-'}`);
+      console.log(
+        `  - ${it.producer ?? ''} | ${it.name} | vintage=${it.vintage} | varietal=${it.varietal ?? ''} | region=${it.region ?? ''} | country=${it.country ?? ''} | g=${it.glassPrice ?? '-'} b=${it.bottlePrice ?? '-'} p=${it.price ?? '-'} | bin=${it.binNumber ?? '-'}`
+      );
     }
   }
-  console.log(`\nTotal wines: ${wines.length}`);
+  console.log(`Total wines after filterFoodNoise: ${wines.length}`);
+  return { parsed, wines };
+}
 
-  console.log('\n=== Sample entries ===');
-  for (const w of wines.slice(0, 5)) {
+function main() {
+  const { parsed, wines } = runSample('SAMPLE_WINE_LIST', SAMPLE_WINE_LIST);
+  const { parsed: noisyParsed, wines: noisyWines } = runSample(
+    'NOISY_WINE_LIST',
+    NOISY_WINE_LIST
+  );
+  const { parsed: gluedParsed, wines: gluedWines } = runSample(
+    'GLUED_NUMBERS_WINE_LIST',
+    GLUED_NUMBERS_WINE_LIST
+  );
+
+  console.log('\n=== Sample entries (first 3) ===');
+  for (const w of wines.slice(0, 3)) {
+    console.log(JSON.stringify(w, null, 2));
+  }
+  console.log('\n=== Glued-number entries ===');
+  for (const w of gluedWines) {
     console.log(JSON.stringify(w, null, 2));
   }
 
@@ -62,14 +111,112 @@ function main() {
     ['Fortified section detected', parsed.sections.some((s) => s.category === 'fortified')],
     ['Sake section detected', parsed.sections.some((s) => s.category === 'sake')],
     ['Vintage parsed', wines.some((w) => w.vintage === 2019)],
-    ['NV handled', wines.some((w) => w.vintage === null && /yquem|clicquot|taylor|dassai/i.test(`${w.producer ?? ''} ${w.name}`))],
+    [
+      'NV handled',
+      wines.some(
+        (w) =>
+          w.vintage === null &&
+          /yquem|clicquot|taylor|dassai/i.test(`${w.producer ?? ''} ${w.name}`)
+      )
+    ],
     ['Varietal detected (cabernet sauvignon)', wines.some((w) => w.varietal === 'cabernet sauvignon')],
     ['Varietal detected (sauvignon blanc)', wines.some((w) => w.varietal === 'sauvignon blanc')],
     ['Region detected (napa valley)', wines.some((w) => /napa/i.test(w.region ?? ''))],
     ['Country detected (Argentina)', wines.some((w) => w.country === 'Argentina')],
     ['Glass+bottle prices captured', wines.some((w) => w.glassPrice && w.bottlePrice)],
     ['Food line excluded (Caesar Salad)', !wines.some((w) => /caesar/i.test(w.name))],
-    ['Food line excluded (Lobster Roll)', !wines.some((w) => /lobster roll/i.test(w.name))]
+    ['Food line excluded (Lobster Roll)', !wines.some((w) => /lobster roll/i.test(w.name))],
+
+    // Noisy list assertions
+    [
+      'NOISY: standalone "201795" is NOT a wine entry',
+      !noisyWines.some((w) => /201795/.test(w.name))
+    ],
+    [
+      'NOISY: standalone "201974" is NOT a wine entry',
+      !noisyWines.some((w) => /201974/.test(w.name))
+    ],
+    [
+      'NOISY: standalone "202082" is NOT a wine entry',
+      !noisyWines.some((w) => /202082/.test(w.name))
+    ],
+    [
+      'NOISY: standalone "123456" is NOT a wine entry',
+      !noisyWines.some((w) => /123456/.test(w.name))
+    ],
+    [
+      'NOISY: "Bin #4502" is NOT a wine entry',
+      !noisyWines.some((w) => /bin/i.test(`${w.name} ${w.producer ?? ''}`))
+    ],
+    [
+      'NOISY: "Page 12" is NOT a wine entry',
+      !noisyWines.some((w) => /page 12/i.test(w.name))
+    ],
+    [
+      'NOISY: bare "CA" line is NOT a wine entry',
+      !noisyWines.some((w) => /^ca$/i.test(w.name.trim()))
+    ],
+    [
+      'NOISY: bare "USA" line is NOT a wine entry',
+      !noisyWines.some((w) => /^usa$/i.test(w.name.trim()))
+    ],
+    [
+      'NOISY: real wine "Acrobat / Pinot Noir / Russian River" preserved',
+      noisyWines.some(
+        (w) =>
+          /pinot noir/i.test(`${w.varietal ?? ''} ${w.name}`) &&
+          /russian river/i.test(w.region ?? '')
+      )
+    ],
+    [
+      'NOISY: real wine "Sea Smoke / Pinot Noir" preserved',
+      noisyWines.some((w) => /sea smoke/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'NOISY: real wine "Far Niente / Chardonnay" preserved',
+      noisyWines.some(
+        (w) =>
+          /far niente/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          /chardonnay/i.test(w.varietal ?? '')
+      )
+    ],
+    [
+      'NOISY: total wine count is reasonable (< 10)',
+      noisyWines.length > 0 && noisyWines.length <= 8
+    ],
+
+    // Glued vintage+bin assertions
+    [
+      'GLUED: "2023179" splits to vintage 2023 + bin 179 on Acrobat row',
+      gluedWines.some(
+        (w) =>
+          /acrobat/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          w.vintage === 2023 &&
+          w.binNumber === '179'
+      )
+    ],
+    [
+      'GLUED: "2020100" splits to vintage 2020 + bin 100 on Justin row',
+      gluedWines.some(
+        (w) =>
+          /justin/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          w.vintage === 2020 &&
+          w.binNumber === '100'
+      )
+    ],
+    [
+      'GLUED: Caymus row keeps vintage 2020 and price 165 untouched',
+      gluedWines.some(
+        (w) =>
+          /caymus/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          w.vintage === 2020 &&
+          (w.price === 165 || w.bottlePrice === 165)
+      )
+    ],
+    [
+      'GLUED: no entry has all-digit name',
+      gluedWines.every((w) => !/^\d+$/.test(w.name.replace(/\s+/g, '')))
+    ]
   ];
 
   console.log('\n=== Assertions ===');

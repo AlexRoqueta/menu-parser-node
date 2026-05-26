@@ -17,6 +17,7 @@ export type WineEntry = {
   body?: string;
   tags: string[];
   notes?: string;
+  binNumber?: string;
   section: string;
 };
 
@@ -98,7 +99,7 @@ const COUNTRY_REGIONS: Record<string, { country: string; regions: RegExp[] }> = 
   },
   usa: {
     country: 'USA',
-    regions: [/\bnapa( valley)?\b/i, /\bsonoma\b/i, /\bwillamette\b/i, /\bcolumbia valley\b/i, /\bwalla walla\b/i, /\bpaso robles\b/i, /\bsanta barbara\b/i, /\bsanta rita\b/i, /\bmendocino\b/i, /\brussian river\b/i, /\boregon\b/i, /\bwashington\b/i, /\bcalifornia\b/i, /\bfinger lakes\b/i, /\bnew york\b/i]
+    regions: [/\bnapa( valley)?\b/i, /\bsonoma\b/i, /\bwillamette\b/i, /\bcolumbia valley\b/i, /\bwalla walla\b/i, /\bpaso robles\b/i, /\bsanta barbara\b/i, /\bsanta rita\b/i, /\bmendocino\b/i, /\brussian river\b/i, /\boregon\b/i, /\bwashington\b/i, /\bcalifornia\b/i, /\bfinger lakes\b/i, /\bnew york\b/i, /\badelaida\b/i]
   },
   argentina: {
     country: 'Argentina',
@@ -198,11 +199,20 @@ const PRICE_TOKEN_RE = /(\$?\d{1,4}(?:\.\d{2})?)/g;
 const TRAILING_NUMBERS_RE = /(?:\s+\$?\d{1,4}(?:\.\d{2})?){1,4}\s*$/;
 const SECTION_DECORATION_RE = /^[*=\-_~•·]{2,}|[*=\-_~•·]{2,}$/g;
 
+const PURE_DIGIT_LINE_RE = /^[\d\s.,\-#]+$/;
+const BIN_PREFIX_RE = /^(?:bin|sku|lot|cellar|item)\s*[#:]?\s*\d+\s*$/i;
+const GLUED_VINTAGE_BIN_RE = /\b(19[5-9]\d|20[0-4]\d)(\d{1,4})\b/;
+
 const FOOD_NEGATIVE_RE =
   /\b(salad|sandwich|burger|pizza|pasta|risotto|steak|ribeye|filet|oyster|clam|mussel|shrimp|crab|lobster|tartare|crudo|sashimi|nigiri|caviar|truffle butter|fries|side|dessert|cake|pie|cookie|sorbet|ice cream|sopapilla|enchilada|burrito|taco|fajita|quesadilla|tamale)\b/i;
 
 const FOOD_SECTION_NAMES_RE =
   /\b(entr[eé]e|appetizer|salad|sandwich|side|raw bar|shellfish|sushi|kids?|antojito|combinations?|fajitas?|burritos?|tacos?|quesadillas?|on the grill)\b/i;
+
+const NOISE_LINE_RE =
+  /^(?:page \d+|continued|see reverse|all prices.*|prices subject.*|tax.*included|gratuity.*|menu \d+|wine list \d+|served by the (glass|bottle))$/i;
+
+const STATE_ABBR_RE = /^(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)$/;
 
 function slugify(value: string): string {
   return value
@@ -302,6 +312,30 @@ function isVintageToken(token: string): boolean {
   return y >= 1950 && y <= 2049;
 }
 
+function splitGluedVintageBin(line: string): { line: string; bin?: string } {
+  const m = line.match(GLUED_VINTAGE_BIN_RE);
+  if (!m) return { line };
+  const year = parseInt(m[1], 10);
+  if (year < 1950 || year > 2049) return { line };
+  const tail = m[2];
+  if (!/^\d{1,4}$/.test(tail)) return { line };
+  const replaced = line.replace(GLUED_VINTAGE_BIN_RE, `$1 $2`);
+  return { line: replaced, bin: tail };
+}
+
+function extractTrailingBin(line: string): { name: string; bin?: string } {
+  const tokens = line.split(/\s+/);
+  if (tokens.length === 0) return { name: line };
+  const last = tokens[tokens.length - 1];
+  if (isVintageToken(last)) return { name: line };
+  if (/^\$?\d{1,4}(?:\.\d{2})?$/.test(last)) return { name: line };
+  if (/^\d{3,7}$/.test(last)) {
+    tokens.pop();
+    return { name: tokens.join(' ').trim(), bin: last };
+  }
+  return { name: line };
+}
+
 function extractTrailingPrices(line: string): { name: string; prices: number[] } {
   const tokens = line.split(/\s+/);
   const prices: number[] = [];
@@ -322,19 +356,84 @@ function extractTrailingPrices(line: string): { name: string; prices: number[] }
   return { name: tokens.join(' ').trim(), prices };
 }
 
+function isLikelyBinOrNoiseLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  if (PURE_DIGIT_LINE_RE.test(trimmed)) return true;
+  if (BIN_PREFIX_RE.test(trimmed)) return true;
+  if (NOISE_LINE_RE.test(trimmed)) return true;
+  const letters = trimmed.replace(/[^A-Za-z]/g, '');
+  if (letters.length < 3) return true;
+  return false;
+}
+
+function hasMeaningfulProducerText(text: string): boolean {
+  const stripped = text.replace(/[\d$.,;:#%/\\()\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!stripped) return false;
+  const tokens = stripped.split(/\s+/);
+  let alphaWords = 0;
+  for (const tok of tokens) {
+    if (/^[A-Za-z][A-Za-z'’`\-]*$/.test(tok)) {
+      if (tok.length >= 3 && !STATE_ABBR_RE.test(tok.toUpperCase())) {
+        alphaWords++;
+      }
+    }
+  }
+  return alphaWords >= 1;
+}
+
 function looksLikeWineEntry(line: string): boolean {
   if (!line || line.length < 4) return false;
   if (FOOD_NEGATIVE_RE.test(line)) return false;
   if (/^\(/.test(line)) return false;
+  if (isLikelyBinOrNoiseLine(line)) return false;
   const hasUpper = /[A-Z]/.test(line);
   if (!hasUpper) return false;
+
+  const { line: deglued } = splitGluedVintageBin(line);
+  const { name: noBin } = extractTrailingBin(deglued);
+  const stripped = extractTrailingPrices(noBin);
+  let candidate = stripped.name;
+  const vintageInfo = detectVintage(candidate);
+  candidate = vintageInfo.cleaned;
+
   const hasVintage = VINTAGE_RE.test(line) || NV_RE.test(line);
-  const { prices } = extractTrailingPrices(line);
+  const { prices } = extractTrailingPrices(deglued);
   const hasPrice = prices.length > 0;
   const hasVarietal = detectVarietal(line) !== undefined;
-  const { country } = detectRegionAndCountry(line);
+  const { region, country } = detectRegionAndCountry(line);
   const hasGeo = Boolean(country);
-  return hasVintage || hasPrice || hasVarietal || hasGeo;
+
+  if (!hasMeaningfulProducerText(candidate)) {
+    return false;
+  }
+
+  const evidenceCount =
+    (hasVintage ? 1 : 0) +
+    (hasPrice ? 1 : 0) +
+    (hasVarietal ? 1 : 0) +
+    (hasGeo ? 1 : 0);
+
+  if (evidenceCount === 0) return false;
+
+  if (hasGeo && !hasVintage && !hasPrice && !hasVarietal) {
+    let textAfterGeo = candidate;
+    if (region) {
+      textAfterGeo = textAfterGeo.replace(
+        new RegExp(`\\b${region.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+        ''
+      );
+    }
+    if (country) {
+      textAfterGeo = textAfterGeo.replace(
+        new RegExp(`\\b${country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+        ''
+      );
+    }
+    if (!hasMeaningfulProducerText(textAfterGeo)) return false;
+  }
+
+  return true;
 }
 
 function splitProducerName(text: string): { producer?: string; name: string } {
@@ -361,6 +460,17 @@ function buildWineEntry(
   index: number
 ): WineEntry | null {
   let working = rawLine.trim();
+
+  const deglued = splitGluedVintageBin(working);
+  working = deglued.line;
+  let bin = deglued.bin;
+
+  const binStripped = extractTrailingBin(working);
+  if (binStripped.bin) {
+    working = binStripped.name;
+    bin = bin ?? binStripped.bin;
+  }
+
   const stripped = extractTrailingPrices(working);
   const prices = stripped.prices;
   if (prices.length > 0) {
@@ -394,6 +504,8 @@ function buildWineEntry(
 
   const { producer, name } = splitProducerName(textForName);
   if (!name || name.length < 2) return null;
+  if (!hasMeaningfulProducerText(`${producer ?? ''} ${name}`)) return null;
+  if (/^\d+$/.test(name.replace(/\s+/g, ''))) return null;
 
   const id = slugify(`${section}-${name}-${vintageResult.vintage ?? 'nv'}`) || `wine-${index + 1}`;
 
@@ -446,6 +558,7 @@ function buildWineEntry(
   if (priceTiers) entry.priceTiers = priceTiers;
   if (styleInfo.style) entry.style = styleInfo.style;
   if (styleInfo.body) entry.body = styleInfo.body;
+  if (bin) entry.binNumber = bin;
 
   return entry;
 }
@@ -482,6 +595,14 @@ export function parseWineText(text: string, sourceFile: string): ParsedWineList 
       flush();
       current = { section: cls.canonical, category: cls.category, items: [] };
       lastEntry = null;
+      continue;
+    }
+
+    if (isLikelyBinOrNoiseLine(line)) {
+      if (lastEntry && !lastEntry.binNumber) {
+        const m = line.match(/^\d{3,7}$/);
+        if (m) lastEntry.binNumber = m[0];
+      }
       continue;
     }
 
@@ -544,6 +665,9 @@ export function filterFoodNoise(entries: WineEntry[]): WineEntry[] {
     const blob = `${e.name} ${e.notes ?? ''}`;
     if (FOOD_NEGATIVE_RE.test(blob)) return false;
     if (!e.name || e.name.length < 2) return false;
+    if (/^\d+$/.test(e.name.replace(/\s+/g, ''))) return false;
+    const letters = e.name.replace(/[^A-Za-z]/g, '');
+    if (letters.length < 3) return false;
     return true;
   });
 }
