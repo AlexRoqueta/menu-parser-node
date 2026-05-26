@@ -9,22 +9,35 @@ import {
 
 export type WineLlmPrices = {
   glass?: number;
-  half_bottle_carafe?: number;
+  carafe?: number;
+  half_bottle?: number;
   bottle?: number;
 };
 
 export type WineLlmRecord = {
-  wine: string;
-  vintage?: string | null;
+  page?: number | null;
+  section?: string | null;
   category?: string | null;
   bin?: string | null;
+  wine: string;
+  vintage?: string | null;
   prices: WineLlmPrices;
   source_pages?: number[];
+};
+
+export type WineLlmCounts = {
+  unique_wine_offerings: number;
+  price_records: number;
+  glass_prices: number;
+  carafe_prices: number;
+  half_bottle_prices: number;
+  bottle_prices: number;
 };
 
 export type WineLlmExtraction = {
   source_file: string;
   extraction_scope: string;
+  counts: WineLlmCounts;
   wine_count: number;
   wines: WineLlmRecord[];
 };
@@ -50,36 +63,53 @@ export type TableSommWine = {
   section: string;
 };
 
-export const WINE_LLM_PARSER_VERSION = '2.1.0-llm-chunked';
+export const WINE_LLM_PARSER_VERSION = '2.2.0-llm-chunked-counts';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_EXTRACTION_SCOPE =
-  'Only wines fully identified with a glass, half-bottle carafe, or bottle price; cocktails, beer, spirits, and non-wine items excluded.';
+  'Every wine offering with at least one price (glass, carafe, half-bottle, or bottle). Same wine appearing in both Wines-by-the-Glass and Bottle List sections is counted as two separate offerings. Cocktails, beer, spirits, food, and non-wine items excluded.';
 
 // Default chars-per-chunk target. The Water Grill PDF pages are ~2k chars each,
 // so groups of ~2 pages keep each call well under the JSON response cap while
 // still giving the LLM enough context per request. Configurable via env var.
 const DEFAULT_CHUNK_CHAR_TARGET = 4500;
 const DEFAULT_PAGES_PER_CHUNK = 2;
+// Cap concurrent LLM calls so we don't slam the API but still parallelize.
+const DEFAULT_CHUNK_CONCURRENCY = 3;
 
 const SYSTEM_PROMPT = `You are an expert sommelier and structured-data extractor.
 You are given the raw extracted text of a restaurant wine list (possibly with page markers).
-Your task: extract EVERY item that can be fully identified as a WINE and that has at least
-one price among glass, half-bottle carafe, or full bottle. Return raw JSON only.
+Your task: extract EVERY wine OFFERING with at least one price among glass, carafe,
+half-bottle, or bottle. Return raw JSON only.
 
 THE LIST HAS MULTIPLE FORMATS — extract from ALL of them:
 
-  FORMAT A — "By the glass" tables (usually one page):
+  FORMAT A — "Wines by the Glass" section (typically one page):
     "Pinot Gris, Cooper Mountain, Willamette Valley, OR 2023 14.5 28"
-    Numbers on the right are glass price and (when there are two numbers)
-    half-bottle / carafe price. Column headers can read "glass" "½ bottle carafe".
+    Two columns of prices appear. The FIRST number is the glass price; the
+    SECOND number (when present) is the carafe price (NOT a half-bottle).
+    Column headers can read "glass" "carafe".
+    For these entries: section = "Wines by the Glass". The category should be
+    inferred from sub-headings on the page ("Sparkling", "White", "Rose",
+    "Red") — use a short capitalized form: "Sparkling", "White", "Rose",
+    "Red".
 
-  FORMAT B — Bottle list pages (Champagne, White, Reds, Cabernet, etc.):
+  FORMAT B — Bottle List pages (Champagne, Chardonnay, Pinot Noir, etc.):
     "1004 Gloria Ferrer Sonoma Brut, Sonoma, CA NV 66"
     "200 Stolpman Estate Syrah, Ballard Canyon, Santa Barbara, CA 2023 71"
     The leading number is the BIN number. After the wine descriptor comes the
     vintage (4-digit year or NV) and ONE price — that price is the BOTTLE price.
-    These wines are bottle-only and MUST be included in the output.
+    These wines are bottle-only and MUST be included.
+    For these entries: section = "Bottle List". The category should be the
+    EXACT current section heading as printed on the page, preserved in its
+    original ALL-CAPS form, e.g. "CHAMPAGNE & SPARKLING WINE", "CHARDONNAY",
+    "PINOT NOIR", "CABERNET SAUVIGNON", "BORDEAUX & NEW WORLD 'BORDEAUX'",
+    "SOUTHERN RHÔNE & NEW WORLD 'RHÔNE'", etc.
+
+DUPLICATE / OFFERING RULES:
+- If a wine appears on the Wines-by-the-Glass page AND in the Bottle List,
+  emit TWO separate records — one per offering. They differ by section,
+  category, and prices, and both must be counted.
 
 STRICT RULES:
 - Include bottle-only wines from FORMAT B. Do not skip a wine just because it
@@ -87,49 +117,42 @@ STRICT RULES:
 - Exclude cocktails, beer (ale/lager/pilsner/ipa/stout), spirits (whiskey/bourbon/
   vodka/gin/rum/tequila/mezcal/cognac/brandy/amaro/liqueur), sake (unless the
   surrounding section is clearly wine), spirit-free drinks, food items.
-- Exclude section headings ("::SPARKLING::", "BORDEAUX & NEW WORLD 'BORDEAUX'"),
-  column headers ("glass", "½ bottle carafe", "bottle"), page footers (long
-  numeric strings like "13520260516"), and any line that does not identify a
-  complete wine with at least one price.
+- Exclude section/category HEADINGS themselves ("CHAMPAGNE & SPARKLING WINE",
+  "BORDEAUX & NEW WORLD 'BORDEAUX'", "Wines by the Glass"), column headers
+  ("glass", "carafe", "bottle"), page footers (long numeric strings like
+  "13520260516"), and any line that does not identify a complete wine with at
+  least one price.
+- Do NOT collapse a wine to its region/country/appellation. The "wine" field
+  must identify a specific producer/varietal offering.
 - Do NOT invent entries. If unsure, omit.
 - Preserve diacritics. Preserve apostrophes and quoted cuvée names.
 - The "wine" field is a single human-readable string describing the wine
-  identity, e.g. "Varietal, Producer 'Cuvée', Region/Appellation, Country" or
-  the producer-led form used on the bottle pages
-  ("Gloria Ferrer Sonoma Brut, Sonoma, CA"). Keep it on one line. Do NOT collapse
-  it to a region or category — it must identify a specific wine.
+  identity. Include the trailing vintage token in the string as printed on the
+  page (e.g. "Saracco Moscato d'Asti, Piedmont, Italy 2024").
 - "vintage" is a 4-digit year as a string, or "NV" for non-vintage, or null.
-- "category" is one of: "Red", "White", "Rosé", "Sparkling", "Champagne",
-  "Orange", "Dessert", "Fortified", or null when unclear. Use Rosé with the
-  accent. Infer the category from the current section heading you have most
-  recently seen (e.g. ":: CHARDONNAY ::" → White; ":: PINOT NOIR ::" → Red;
-  ":: CHAMPAGNE & SPARKLING WINE ::" → Champagne if labelled "Champagne" else
-  Sparkling).
+- "page" is the integer page number (from the **page-N** marker) where the
+  wine appears.
 - "bin" is the leading bin/list number when the line begins with one
   (FORMAT B), else null.
 - "prices" is an object with optional numeric fields:
-    glass, half_bottle_carafe, bottle
-  (numbers, no currency symbol). Omit fields that are not present.
-  FORMAT A: assign the first numeric trailing column to glass, the second to
-  half_bottle_carafe.
-  FORMAT B: the single trailing number is bottle.
-- "source_pages" is the list of page numbers (1-indexed) where the wine appears.
-  Use the "**page-N**" markers in the input when present. If the input contains
-  no page markers, use an empty array.
+    glass, carafe, half_bottle, bottle
+  (numbers, no currency symbol). Omit fields that are not present. Use
+  "carafe" for Wines-by-the-Glass second-column prices on this menu — it is a
+  carafe pour, not a half-bottle. Reserve "half_bottle" for entries the menu
+  explicitly labels as "½ bottle" or "half bottle".
 
 OUTPUT FORMAT (raw JSON, no markdown fences, no commentary):
 {
   "source_file": "<the file name you were given>",
-  "extraction_scope": "Only wines fully identified with a glass, half-bottle carafe, or bottle price; cocktails, beer, spirits, and non-wine items excluded.",
-  "wine_count": <number>,
   "wines": [
     {
-      "wine": "...",
-      "vintage": "2022" | "NV" | null,
-      "category": "Red" | "White" | "Rosé" | "Sparkling" | "Champagne" | "Orange" | "Dessert" | "Fortified" | null,
+      "page": 3,
+      "section": "Wines by the Glass" | "Bottle List",
+      "category": "Sparkling" | "White" | "Rose" | "Red" | "CHAMPAGNE & SPARKLING WINE" | "CHARDONNAY" | ...,
       "bin": "1004" | null,
-      "prices": { "glass": 15.0, "half_bottle_carafe": 29.0, "bottle": 120.0 },
-      "source_pages": [3]
+      "wine": "Saracco Moscato d'Asti, Piedmont, Italy 2024",
+      "vintage": "2024" | "NV" | null,
+      "prices": { "glass": 13.0, "carafe": 28.0, "half_bottle": 0, "bottle": 66.0 }
     }
   ]
 }`;
@@ -151,6 +174,8 @@ export type ExtractOptions = LlmCallOptions & {
    */
   pagesPerChunk?: number;
   chunkCharTarget?: number;
+  /** Max concurrent LLM calls when processing chunks. */
+  concurrency?: number;
 };
 
 /** Public: extract per-page text from a PDF buffer (1-indexed). */
@@ -305,6 +330,27 @@ export async function callOpenAi(
 
 export const parseLlmJson = sharedParseLlmJson;
 
+export function computeCounts(wines: WineLlmRecord[]): WineLlmCounts {
+  let glass = 0;
+  let carafe = 0;
+  let half = 0;
+  let bottle = 0;
+  for (const w of wines) {
+    if (w.prices.glass != null) glass += 1;
+    if (w.prices.carafe != null) carafe += 1;
+    if (w.prices.half_bottle != null) half += 1;
+    if (w.prices.bottle != null) bottle += 1;
+  }
+  return {
+    unique_wine_offerings: wines.length,
+    price_records: glass + carafe + half + bottle,
+    glass_prices: glass,
+    carafe_prices: carafe,
+    half_bottle_prices: half,
+    bottle_prices: bottle
+  };
+}
+
 /** Normalize and validate an arbitrary LLM payload into WineLlmExtraction. */
 export function validateAndNormalize(
   payload: unknown,
@@ -329,6 +375,7 @@ export function validateAndNormalize(
       typeof obj.extraction_scope === 'string' && obj.extraction_scope.trim()
         ? obj.extraction_scope
         : (opts.extractionScope ?? DEFAULT_EXTRACTION_SCOPE),
+    counts: computeCounts(wines),
     wine_count: wines.length,
     wines
   };
@@ -338,21 +385,23 @@ function normalizeOneWine(w: any): WineLlmRecord | null {
   if (!w || typeof w !== 'object') return null;
   const wineName = typeof w.wine === 'string' ? w.wine.trim() : '';
   if (!wineName) return null;
+  if (isHeadingOrNoise(wineName)) return null;
 
   const pricesIn = (w.prices ?? {}) as any;
   const glass = coerceMoney(pricesIn.glass ?? pricesIn.by_glass ?? pricesIn.glassPrice);
+  // Accept legacy "half_bottle_carafe" by mapping it to carafe (this menu uses
+  // carafe, not half-bottle). Caller can still send distinct carafe/half_bottle.
+  const carafe = coerceMoney(pricesIn.carafe);
   const half = coerceMoney(
-    pricesIn.half_bottle_carafe ??
-      pricesIn.halfBottleCarafe ??
-      pricesIn.half_bottle ??
-      pricesIn.carafe
+    pricesIn.half_bottle ?? pricesIn.halfBottle ?? pricesIn.half_bottle_carafe
   );
   const bottle = coerceMoney(pricesIn.bottle ?? pricesIn.full_bottle ?? pricesIn.bottlePrice);
-  if (glass == null && half == null && bottle == null) return null;
+  if (glass == null && carafe == null && half == null && bottle == null) return null;
 
   const prices: WineLlmPrices = {};
   if (glass != null) prices.glass = glass;
-  if (half != null) prices.half_bottle_carafe = half;
+  if (carafe != null) prices.carafe = carafe;
+  if (half != null) prices.half_bottle = half;
   if (bottle != null) prices.bottle = bottle;
 
   let vintage: string | null = null;
@@ -368,7 +417,12 @@ function normalizeOneWine(w: any): WineLlmRecord | null {
 
   let category: string | null = null;
   if (typeof w.category === 'string' && w.category.trim()) {
-    category = normalizeCategory(w.category.trim());
+    category = w.category.trim();
+  }
+
+  let section: string | null = null;
+  if (typeof w.section === 'string' && w.section.trim()) {
+    section = w.section.trim();
   }
 
   let bin: string | null = null;
@@ -377,17 +431,27 @@ function normalizeOneWine(w: any): WineLlmRecord | null {
     if (b) bin = b;
   }
 
+  let page: number | null = null;
+  if (w.page != null) {
+    const n = Number(w.page);
+    if (Number.isInteger(n) && n > 0) page = n;
+  }
+
   const pages = Array.isArray(w.source_pages)
     ? w.source_pages
         .map((p: any) => Number(p))
         .filter((n: number) => Number.isInteger(n) && n > 0)
-    : [];
+    : page != null
+      ? [page]
+      : [];
 
   return {
-    wine: wineName,
-    vintage,
+    page,
+    section,
     category,
     bin,
+    wine: wineName,
+    vintage,
     prices,
     source_pages: pages
   };
@@ -395,37 +459,60 @@ function normalizeOneWine(w: any): WineLlmRecord | null {
 
 const coerceMoney = sharedCoerceMoney;
 
-function normalizeCategory(input: string): string | null {
-  const lc = input.toLowerCase();
-  if (/sparkl/.test(lc)) return 'Sparkling';
-  if (/champagne/.test(lc)) return 'Champagne';
-  if (/ros/.test(lc)) return 'Rosé';
-  if (/orange|skin/.test(lc)) return 'Orange';
-  if (/dessert|sweet|late harvest|sauternes|ice ?wine/.test(lc)) return 'Dessert';
-  if (/port|sherry|madeira|fortified|marsala/.test(lc)) return 'Fortified';
-  if (/red/.test(lc)) return 'Red';
-  if (/white/.test(lc)) return 'White';
-  return input.charAt(0).toUpperCase() + input.slice(1);
+// Filter out lines the LLM may have accidentally emitted as wines but which are
+// actually section headings, column labels, or non-wine drink categories.
+const HEADING_NAME_PATTERNS = [
+  /^(red|white|rose|rosé|sparkling|champagne|orange|by the glass|wines by the glass|bottle list|france|italy|usa|california|napa|sonoma|spain|chile|argentina|australia|new zealand|portugal|germany|austria)$/i,
+  /^(cocktails?|spirits?|whiskey|bourbon|vodka|gin|rum|tequila|mezcal|cognac|brandy|amaro|liqueur|sake|beer|ale|lager|pilsner|ipa|stout|draughts?|spirit ?free|cans and bottles)$/i,
+  /^(glass|carafe|half bottle|½ bottle carafe|bottle)$/i,
+  /^chardonnay$/i,
+  /^pinot (noir|gris|grigio)$/i,
+  /^cabernet sauvignon$/i,
+  /^merlot$/i,
+  /^malbec$/i,
+  /^riesling$/i,
+  /^sauvignon blanc$/i,
+  /^syrah( & shiraz)?$/i,
+  /^bold reds$/i,
+  /^bordeaux( & new world.*)?$/i,
+  /^southern rh[oô]ne.*$/i,
+  /^adventure in white wine$/i,
+  /^champagne & sparkling( wine)?$/i,
+  /^ros[eé] wine$/i,
+  /^pinot grigio & pinot gris$/i
+];
+
+function isHeadingOrNoise(name: string): boolean {
+  const trimmed = name.trim();
+  if (trimmed.length < 4) return true;
+  if (/^\d+$/.test(trimmed)) return true;
+  if (/^[:*•\-_–—]+$/.test(trimmed)) return true;
+  for (const re of HEADING_NAME_PATTERNS) {
+    if (re.test(trimmed)) return true;
+  }
+  return false;
 }
 
 /**
- * Build a dedup key from a wine record. Same producer+wine descriptor at the
- * same vintage with the same price set should not appear twice — but a wine
- * that legitimately appears on both the by-glass page and the bottle list IS
- * a different listing (different prices) and we keep both.
+ * Build a dedup key from a wine record. Same wine, vintage, AND price set at
+ * the same section should not appear twice — but the same wine that appears as
+ * an offering both BTG and Bottle List (different prices/section) is two
+ * distinct offerings and we keep both.
  */
 function dedupKey(rec: WineLlmRecord): string {
   const name = rec.wine.toLowerCase().replace(/[\s'"]+/g, ' ').trim();
   const vintage = (rec.vintage ?? '').toLowerCase();
+  const section = (rec.section ?? '').toLowerCase();
   const g = rec.prices.glass ?? '';
-  const h = rec.prices.half_bottle_carafe ?? '';
+  const c = rec.prices.carafe ?? '';
+  const h = rec.prices.half_bottle ?? '';
   const b = rec.prices.bottle ?? '';
-  return `${name}|${vintage}|${g}|${h}|${b}`;
+  return `${name}|${vintage}|${section}|${g}|${c}|${h}|${b}`;
 }
 
 /**
  * Merge several extractions into one, deduping wines and unioning source_pages
- * for entries that match on (name, vintage, prices).
+ * for entries that match on (name, vintage, section, prices).
  */
 export function mergeExtractions(
   parts: WineLlmExtraction[],
@@ -443,6 +530,8 @@ export function mergeExtractions(
         existing.source_pages = Array.from(pages).sort((a, b) => a - b);
         if (!existing.bin && w.bin) existing.bin = w.bin;
         if (!existing.category && w.category) existing.category = w.category;
+        if (!existing.section && w.section) existing.section = w.section;
+        if (!existing.page && w.page) existing.page = w.page;
       }
     }
   }
@@ -450,9 +539,34 @@ export function mergeExtractions(
   return {
     source_file: opts.sourceFile,
     extraction_scope: opts.extractionScope ?? DEFAULT_EXTRACTION_SCOPE,
+    counts: computeCounts(wines),
     wine_count: wines.length,
     wines
   };
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const max = Math.max(1, limit);
+  const runners: Promise<void>[] = [];
+  for (let r = 0; r < Math.min(max, items.length); r++) {
+    runners.push(
+      (async () => {
+        while (true) {
+          const i = next++;
+          if (i >= items.length) return;
+          results[i] = await worker(items[i], i);
+        }
+      })()
+    );
+  }
+  await Promise.all(runners);
+  return results;
 }
 
 /** Top-level: call the LLM (chunked when pages are provided) and merge results. */
@@ -485,39 +599,46 @@ export async function extractWinesWithLlm(opts: ExtractOptions): Promise<WineLlm
     return {
       source_file: opts.sourceFile,
       extraction_scope: opts.extractionScope ?? DEFAULT_EXTRACTION_SCOPE,
+      counts: computeCounts([]),
       wine_count: 0,
       wines: []
     };
   }
 
-  const partials: WineLlmExtraction[] = [];
-  for (const chunk of chunks) {
-    const chunkPagesText = chunk.pageNumbers.map((n) => pages[n - 1] ?? '');
-    const userPrompt = buildUserPrompt({
-      sourceFile: opts.sourceFile,
-      pages: chunkPagesText,
-      pageNumbers: chunk.pageNumbers
-    });
-    const content = await callOpenAi(
-      [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
-      opts
-    );
-    const parsed = parseLlmJson(content);
-    const part = validateAndNormalize(parsed, {
-      sourceFile: opts.sourceFile,
-      extractionScope: opts.extractionScope
-    });
-    // If the LLM did not populate source_pages, infer them from the chunk.
-    for (const w of part.wines) {
-      if (!w.source_pages || w.source_pages.length === 0) {
-        w.source_pages = [...chunk.pageNumbers];
+  const partials = await runWithConcurrency(
+    chunks,
+    opts.concurrency ?? DEFAULT_CHUNK_CONCURRENCY,
+    async (chunk) => {
+      const chunkPagesText = chunk.pageNumbers.map((n) => pages[n - 1] ?? '');
+      const userPrompt = buildUserPrompt({
+        sourceFile: opts.sourceFile,
+        pages: chunkPagesText,
+        pageNumbers: chunk.pageNumbers
+      });
+      const content = await callOpenAi(
+        [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt }
+        ],
+        opts
+      );
+      const parsed = parseLlmJson(content);
+      const part = validateAndNormalize(parsed, {
+        sourceFile: opts.sourceFile,
+        extractionScope: opts.extractionScope
+      });
+      // If the LLM did not populate source_pages or page, infer them from the chunk.
+      for (const w of part.wines) {
+        if (!w.source_pages || w.source_pages.length === 0) {
+          w.source_pages = [...chunk.pageNumbers];
+        }
+        if (w.page == null && chunk.pageNumbers.length === 1) {
+          w.page = chunk.pageNumbers[0];
+        }
       }
+      return part;
     }
-    partials.push(part);
-  }
+  );
   return mergeExtractions(partials, {
     sourceFile: opts.sourceFile,
     extractionScope: opts.extractionScope
@@ -528,7 +649,8 @@ export async function extractWinesWithLlm(opts: ExtractOptions): Promise<WineLlm
 export function toTableSommWine(rec: WineLlmRecord, index: number): TableSommWine {
   const tags: string[] = [];
   if (rec.prices.glass != null) tags.push('by-the-glass');
-  if (rec.prices.half_bottle_carafe != null) tags.push('half-bottle-carafe');
+  if (rec.prices.carafe != null) tags.push('carafe');
+  if (rec.prices.half_bottle != null) tags.push('half-bottle');
   if (rec.prices.bottle != null) tags.push('bottle');
 
   const vintageNum =
@@ -536,15 +658,26 @@ export function toTableSommWine(rec: WineLlmRecord, index: number): TableSommWin
 
   const priceTiers: { label: string; price: number }[] = [];
   if (rec.prices.glass != null) priceTiers.push({ label: 'Glass', price: rec.prices.glass });
-  if (rec.prices.half_bottle_carafe != null)
-    priceTiers.push({ label: 'Half Bottle / Carafe', price: rec.prices.half_bottle_carafe });
+  if (rec.prices.carafe != null) priceTiers.push({ label: 'Carafe', price: rec.prices.carafe });
+  if (rec.prices.half_bottle != null)
+    priceTiers.push({ label: 'Half Bottle', price: rec.prices.half_bottle });
   if (rec.prices.bottle != null) priceTiers.push({ label: 'Bottle', price: rec.prices.bottle });
 
-  const primaryPrice =
-    rec.prices.bottle ?? rec.prices.half_bottle_carafe ?? rec.prices.glass ?? null;
+  // halfBottlePrice exposes either carafe or half_bottle to the frontend (they
+  // share the "mid-pour" slot on the TableSomm card). Prefer half_bottle when
+  // both are present (unusual on this menu, but defensible).
+  const halfBottle = rec.prices.half_bottle ?? rec.prices.carafe ?? null;
 
-  const notes = rec.source_pages && rec.source_pages.length > 0
-    ? `Source page${rec.source_pages.length > 1 ? 's' : ''}: ${rec.source_pages.join(', ')}`
+  const primaryPrice =
+    rec.prices.bottle ?? halfBottle ?? rec.prices.glass ?? null;
+
+  const sourcePages = rec.source_pages && rec.source_pages.length > 0
+    ? rec.source_pages
+    : rec.page != null
+      ? [rec.page]
+      : [];
+  const notes = sourcePages.length > 0
+    ? `Source page${sourcePages.length > 1 ? 's' : ''}: ${sourcePages.join(', ')}`
     : undefined;
 
   return {
@@ -553,15 +686,15 @@ export function toTableSommWine(rec: WineLlmRecord, index: number): TableSommWin
     vintage: vintageNum,
     price: primaryPrice,
     glassPrice: rec.prices.glass ?? null,
-    halfBottlePrice: rec.prices.half_bottle_carafe ?? null,
+    halfBottlePrice: halfBottle,
     bottlePrice: rec.prices.bottle ?? null,
     priceTiers,
     category: rec.category ?? undefined,
     binNumber: rec.bin ?? undefined,
     tags,
     notes,
-    sourcePages: rec.source_pages,
-    section: rec.category ?? 'Wine'
+    sourcePages,
+    section: rec.section ?? rec.category ?? 'Wine'
   };
 }
 
@@ -574,5 +707,6 @@ export {
   DEFAULT_MODEL,
   DEFAULT_CHUNK_CHAR_TARGET,
   DEFAULT_PAGES_PER_CHUNK,
+  DEFAULT_CHUNK_CONCURRENCY,
   SYSTEM_PROMPT
 };

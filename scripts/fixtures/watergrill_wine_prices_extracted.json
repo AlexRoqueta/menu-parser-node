@@ -1,0 +1,2658 @@
+{
+  "source_file": "Watergrill wine menu(1).pdf",
+  "counts": {
+    "unique_wine_offerings": 238,
+    "price_records": 265,
+    "glass_prices": 31,
+    "carafe_prices": 27,
+    "half_bottle_prices": 0,
+    "bottle_prices": 207
+  },
+  "wines": [
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Sparkling",
+      "bin": null,
+      "wine": "Saracco Moscato d'Asti, Piedmont, Italy 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 13.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Sparkling",
+      "bin": null,
+      "wine": "Mionetto 'Avantgarde' Prosecco Brut, Treviso, Veneto, Italy NV",
+      "vintage": "NV",
+      "prices": {
+        "glass": 13.5
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Sparkling",
+      "bin": null,
+      "wine": "Scharffenberger Brut Rosé, Mendocino, CA NV",
+      "vintage": "NV",
+      "prices": {
+        "glass": 19.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Sparkling",
+      "bin": null,
+      "wine": "Taittinger 'La Francaise' Brut, Reims, Champagne, France NV",
+      "vintage": "NV",
+      "prices": {
+        "glass": 27.5
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Pinot Gris, Cooper Mountain, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 14.5,
+        "carafe": 28.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Pinot Grigio, Santa Margherita, Valdadige, Italy 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 18.0,
+        "carafe": 35.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "White Pinot Noir, Left Coast Cellars, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 15.5,
+        "carafe": 30.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Riesling, Hugel Riesling, Alsace, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 17.0,
+        "carafe": 33.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Grüner Veltliner, Bründlmayer 'Kamptaler Terrassen', Kamptal, Austria 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 16.5,
+        "carafe": 32.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Albariño, La Caña, Rías Baixas, Spain 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 15.0,
+        "carafe": 29.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Sauvignon Blanc, Domaine Villaudiere, Sancerre, Loire, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 22.0,
+        "carafe": 43.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Sauvignon Blanc, Onx 'Field Day', Templeton Gap, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 14.0,
+        "carafe": 27.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Sauvignon Blanc, Silverado 'Miller Ranch', Yountville, Napa Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 15.0,
+        "carafe": 29.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Sauvignon Blanc, Cloudy Bay, Marlborough, NZ 2025",
+      "vintage": "2025",
+      "prices": {
+        "glass": 24.5,
+        "carafe": 48.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Chardonnay, Sean Minor, Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 15.0,
+        "carafe": 29.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Chardonnay, JM Brocard 'Sainte Claire', Chablis, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 19.0,
+        "carafe": 37.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Chardonnay, Failla, Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 18.0,
+        "carafe": 35.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "White",
+      "bin": null,
+      "wine": "Chardonnay, Rombauer, Carneros, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 27.5,
+        "carafe": 54.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Rose",
+      "bin": null,
+      "wine": "Daou 'Discovery', Paso Robles, CA 2025",
+      "vintage": "2025",
+      "prices": {
+        "glass": 14.0,
+        "carafe": 27.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Rose",
+      "bin": null,
+      "wine": "Caves d'Esclans 'Whispering Angel', Côtes de Provence, France 2025",
+      "vintage": "2025",
+      "prices": {
+        "glass": 15.5,
+        "carafe": 30.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Pinot Noir, Torii Mor, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 15.0,
+        "carafe": 29.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Pinot Noir, Argyle Reserve, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 21.0,
+        "carafe": 41.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Pinot Noir, Duckhorn 'Decoy Limited', Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 18.0,
+        "carafe": 35.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Nebbiolo, Damilano 'Marghe', Langhe, Piedmont, Italy 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 16.5,
+        "carafe": 32.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Merlot, Six Stack by Markham Vineyards, North Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 16.0,
+        "carafe": 31.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Malbec, Catena Vista Flores, Mendoza, Argentina 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 15.0,
+        "carafe": 29.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Syrah, Stolpman Estate, Ballard Canyon, Santa Barbara, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 18.5,
+        "carafe": 36.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Cabernet Sauvignon, Ancient Peaks 'Sta. Marg. Ranch', Paso Robles, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "glass": 15.0,
+        "carafe": 29.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Cabernet Sauvignon, Truchard Vineyards, Carneros, Napa, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "glass": 21.0,
+        "carafe": 41.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Cabernet Sauvignon, Duckhorn Vineyards, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "glass": 32.0,
+        "carafe": 63.0
+      }
+    },
+    {
+      "page": 3,
+      "section": "Wines by the Glass",
+      "category": "Red",
+      "bin": null,
+      "wine": "Zinfandel, Turley 'Juvenile', CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "glass": 16.5,
+        "carafe": 32.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "2000",
+      "wine": "Saracco Moscato d'Asti, Piedmont, Italy 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 49.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "2000",
+      "wine": "Mionetto 'Avantgarde' Prosecco Brut, Treviso, Veneto, Italy NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 51.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1038",
+      "wine": "Bele Casel Prosecco Extra Dry, Asolo Superiore, Italy NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 62.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1004",
+      "wine": "Gloria Ferrer Sonoma Brut, Sonoma, CA NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 66.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1001",
+      "wine": "Argyle Brut, Willamette Valley, OR 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 72.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "2000",
+      "wine": "Scharffenberger Brut Rosé, Mendocino, CA NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 73.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1011",
+      "wine": "Schramsberg Blanc de Noirs, Napa Valley, California 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 92.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1006",
+      "wine": "Nicolas Feuillatte Réserve Exclusive Brut, Epernay, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 98.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1016",
+      "wine": "J Vineyards Brut Rosé, Russian River Valley, Sonoma, CA NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 99.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "2000",
+      "wine": "Taittinger 'La Francaise' Brut, Reims, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 107.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1018",
+      "wine": "Perrier Jouët Grand Brut, Épernay, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 149.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1017",
+      "wine": "Pierre Gimonnet Rosé de Blanc 1er Cru, Cotes de Blanc, Champagne, France NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 153.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1005",
+      "wine": "Moët & Chandon 'Imperial' Brut, Épernay, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 158.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1023",
+      "wine": "Veuve Clicquot 'Yellow Label' Brut, Reims, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 164.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1010",
+      "wine": "Veuve Clicquot Brut Rosé, Reims, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 187.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1012",
+      "wine": "Billecart-Salmon Brut Rosé, Mareuil-sur-Ay, Champagne NV",
+      "vintage": "NV",
+      "prices": {
+        "bottle": 204.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1002",
+      "wine": "Dom Pérignon, Épernay, Champagne 2015",
+      "vintage": "2015",
+      "prices": {
+        "bottle": 556.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "CHAMPAGNE & SPARKLING WINE",
+      "bin": "1003",
+      "wine": "Dom Pérignon Rosé, Épernay, Champagne 2008",
+      "vintage": "2008",
+      "prices": {
+        "bottle": 859.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "200",
+      "wine": "La Caña Albariño, Rías Baixas, Spain 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 57.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "228",
+      "wine": "Lucien Albrecht 'Cuvée Balthazar' Pinot Blanc, Alsace, France 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 58.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "200",
+      "wine": "Left Coast Cellars White Pinot Noir, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 59.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "200",
+      "wine": "Bründlmayer 'Kamptaler Terrassen' Grüner Veltliner, Kamptal, Austria 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 63.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "303",
+      "wine": "Antinori 'Guado al Tasso' Vermentino, Bolgheri, Italy 2025",
+      "vintage": "2025",
+      "prices": {
+        "bottle": 72.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "306",
+      "wine": "Vietti Arneis, Roero, Piedmont, Italy 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 76.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "ADVENTURE IN WHITE WINE",
+      "bin": "250",
+      "wine": "Domaine Trimbach Gewurztraminer, Alsace, France 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 82.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "RIESLING",
+      "bin": "200",
+      "wine": "Hugel, Alsace, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 65.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "RIESLING",
+      "bin": "227",
+      "wine": "Chateau Ste. Michele 'Eroica', Columbia Valley, WA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "PINOT GRIGIO & PINOT GRIS",
+      "bin": "200",
+      "wine": "Cooper Mountain Pinot Gris, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 55.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "PINOT GRIGIO & PINOT GRIS",
+      "bin": "063",
+      "wine": "J Vineyards Pinot Gris, CA 2025",
+      "vintage": "2025",
+      "prices": {
+        "bottle": 58.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "PINOT GRIGIO & PINOT GRIS",
+      "bin": "200",
+      "wine": "Santa Margherita Pinot Grigio, Val d'Adige, Italy 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "PINOT GRIGIO & PINOT GRIS",
+      "bin": "304",
+      "wine": "Jermann Pinot Grigio, Friuli Venezia Giulia, Italy 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 74.0
+      }
+    },
+    {
+      "page": 4,
+      "section": "Bottle List",
+      "category": "PINOT GRIGIO & PINOT GRIS",
+      "bin": "222",
+      "wine": "Domaine Schlumberger 'Les Princes Abbes' Pinot Gris, Alsace, France 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 74.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "200",
+      "wine": "Onx 'Field Day', Templeton Gap, Paso Robles, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 53.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "211",
+      "wine": "Gainey, Santa Ynez Valley, Santa Barbara, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 54.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "208",
+      "wine": "Ferrari-Carano Fumé Blanc, Sonoma Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 55.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "200",
+      "wine": "Silverado 'Miller Ranch', Yountville, Napa, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 57.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "313",
+      "wine": "Craggy Range 'Te Muna Road', Martinborough, NZ 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 66.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "201",
+      "wine": "Brander, Los Olivos Dist., Santa Ynez Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 66.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "312",
+      "wine": "Astrolabe 'Province', Marlborough, NZ 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "217",
+      "wine": "Peju, North Coast, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "214",
+      "wine": "J. Christopher, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 76.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "225",
+      "wine": "Frog's Leap, Rutherford, Napa Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 78.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "209",
+      "wine": "Carr, Los Olivos Dist., Santa Barbara, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 79.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "207",
+      "wine": "Duckhorn Vineyards, Napa Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 79.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "206",
+      "wine": "Cliff Lede, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 84.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "318",
+      "wine": "Henri Bourgeois, Pouilly Fumé, Loire, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 84.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "223",
+      "wine": "Stag's Leap Wine Cellars 'Aveta', Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 84.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "200",
+      "wine": "Domaine Villaudiere, Sancerre, Loire, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 85.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "226",
+      "wine": "Sinegal Estate, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 90.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "203",
+      "wine": "Cakebread Cellars, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 92.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "200",
+      "wine": "Cloudy Bay, Marlborough, NZ 2025",
+      "vintage": "2025",
+      "prices": {
+        "bottle": 95.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "213",
+      "wine": "Twomey by Silver Oak, North Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 96.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "288",
+      "wine": "Pascal Jolivet, Sancerre, Loire, France 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 98.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "212",
+      "wine": "Grgich Hills, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 99.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "216",
+      "wine": "Merry Edwards, Russian River Valley, Sonoma, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 99.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "202",
+      "wine": "Cade, Howell Mountain, Napa Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 105.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "220",
+      "wine": "Rochioli 'Estate', Russian River Valley, Sonoma, CA 2025",
+      "vintage": "2025",
+      "prices": {
+        "bottle": 124.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "SAUVIGNON BLANC",
+      "bin": "218",
+      "wine": "Peter Michael 'L'Apres Midi', Knight's Valley, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 174.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "200",
+      "wine": "Sean Minor, Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 57.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "268",
+      "wine": "Left Coast Cellars 'Truffle Hill', Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 68.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "200",
+      "wine": "Failla, Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "257",
+      "wine": "La Crema, Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 71.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "200",
+      "wine": "JM Brocard 'Sainte Claire', Chablis, France 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 73.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "249",
+      "wine": "Au Bon Climat 'Los Alamos', Santa Barbara, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 86.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "262",
+      "wine": "Frank Family, Carneros, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 88.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "286",
+      "wine": "Jordan, Russian River Valley, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 92.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "302",
+      "wine": "Evening Land 'Seven Springs', Eola-Amity Hills, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 92.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "252",
+      "wine": "Frog's Leap 'Shale and Stone', Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 98.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "273",
+      "wine": "Sonoma-Cutrer 'Les Pierres', Sonoma Coast, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 99.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "234",
+      "wine": "Matthiasson 'Linda Vista Vineyard', Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 102.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "200",
+      "wine": "Rombauer, Carneros, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 107.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "242",
+      "wine": "Liquid Farm 'White Hill Vineyard', Sta. Rita Hills, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 110.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "265",
+      "wine": "Patz & Hall 'Dutton Ranch', Russian River Valley, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 110.0
+      }
+    },
+    {
+      "page": 5,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "276",
+      "wine": "ZD, Carneros, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 113.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "274",
+      "wine": "Ramey Wine Cellars, Fort Ross-Seaview, Sonoma Coast, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 115.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "240",
+      "wine": "Cakebread Cellars, Napa Valley, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 116.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "305",
+      "wine": "Flowers, Sonoma Coast, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 117.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "253",
+      "wine": "Grgich Hills Estate, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 117.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "300",
+      "wine": "Nickel & Nickel 'Truchard', Carneros, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 118.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "310",
+      "wine": "Domaine Pinson, Montmains 1er Cru, Chablis, France 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 127.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "279",
+      "wine": "Château Fuisse 'Tete de Cru', Pouilly-Fuissé, Burgundy, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 131.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "275",
+      "wine": "Williams Selyem, Russian River Valley, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 137.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "248",
+      "wine": "Far Niente, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 149.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "246",
+      "wine": "DuMOL 'isobel', 'Charles Heintz Vineyard', Sonoma Coast, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 151.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "256",
+      "wine": "Chateau Montelena, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 154.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "219",
+      "wine": "Kistler Vineyards 'Les Noisetiers', Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 162.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "258",
+      "wine": "Lewis Cellars Reserve, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 163.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "269",
+      "wine": "Paul Hobbs 'Ross Station,\" Russian River Valley, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 179.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "263",
+      "wine": "Pahlmeyer, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 222.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "333",
+      "wine": "Domaine Louis Latour, Chassagne-Montrachet, Burgundy, France 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 226.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "016",
+      "wine": "Peter Michael 'La Carierre', Knight's Valley, Sonoma, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 232.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "287",
+      "wine": "Olivier Leflaive, Meursault, Burgundy, France 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 256.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "280",
+      "wine": "Domaine Christian Moreau, 'Les Clos' Grand Cru, Chablis, France 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 274.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "331",
+      "wine": "Olivier Leflaive, Puligny-Montrachet, Burgundy, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 280.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "101",
+      "wine": "Domaine William Fevre, Bougros Grand Cru, Chablis, France 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 304.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "CHARDONNAY",
+      "bin": "299",
+      "wine": "Laroche 'Reserve de l'Obedience', 'Blanchots' Grand Cru, Chablis, France 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 458.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "ROSÉ WINE",
+      "bin": "200",
+      "wine": "Daou 'Discovery', Paso Robles, CA 2025",
+      "vintage": "2025",
+      "prices": {
+        "bottle": 53.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "ROSÉ WINE",
+      "bin": "200",
+      "wine": "Caves d'Esclans 'Whispering Angel', Côtes de Provence, France 2025",
+      "vintage": "2025",
+      "prices": {
+        "bottle": 59.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "200",
+      "wine": "Torii Mor, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 57.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "200",
+      "wine": "Duckhorn 'Decoy Limited', Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "200",
+      "wine": "Argyle Reserve, Willamette Valley, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 81.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "934",
+      "wine": "Domaine Matrot, Bourgogne, Burgundy, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 88.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "437",
+      "wine": "Domaine Carneros, Carneros, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 95.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "417",
+      "wine": "Sandhi, Santa Barbara, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 104.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "402",
+      "wine": "Merry Edwards, Sonoma Coast, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 106.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "411",
+      "wine": "Emeritus 'Hallberg Ranch', Russian River, Sonoma, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 108.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "406",
+      "wine": "Brewer Clifton, Sta. Rita Hills, Santa Barbara, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 112.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "401",
+      "wine": "Archery Summit, Dundee Hills, Yamhill, Willamette, OR 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 115.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "420",
+      "wine": "Goldeneye, Anderson Valley, Mendocino, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 122.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "412",
+      "wine": "En Route 'Les Pommiers', Russian River, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 123.0
+      }
+    },
+    {
+      "page": 6,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "433",
+      "wine": "Neyers 'Placida Vineyard', Russian River, Sonoma, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 131.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "425",
+      "wine": "Dehlinger 'Altamont', Russian River, Sonoma, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 137.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "438",
+      "wine": "Raen 'Royal St. Roberts', Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 141.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "403",
+      "wine": "Au Bon Climat 'Knox Alexander', Santa Maria Valley, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 149.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "431",
+      "wine": "Paul Hobbs, Russian River, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 155.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "458",
+      "wine": "Littorai, Sonoma Coast, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 156.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "415",
+      "wine": "Kistler Vineyards, Russian River, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 168.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "409",
+      "wine": "Domaine Serene Evenstad Reserve, Willamette Valley, Oregon 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 187.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "430",
+      "wine": "Williams Selyem, Russian River, Sonoma, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 190.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "952",
+      "wine": "O. Leflaive, Pommard, Burgundy, France 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 196.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "462",
+      "wine": "Aubert 'UV Vineyard', Sonoma Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 198.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "416",
+      "wine": "Sea Smoke 'Southing', Sta. Rita Hills, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 210.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "468",
+      "wine": "Kosta Browne, Russian River, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 214.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "421",
+      "wine": "Williams Selyem 'Westside Rd Neighbors', Russian River, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 222.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "PINOT NOIR",
+      "bin": "445",
+      "wine": "Kosta Browne, Gap's Crown Vineyard, Sonoma Coast, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 277.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "200",
+      "wine": "Damilano 'Marghe' Nebbiolo, Langhe, Piedmont 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 63.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "855",
+      "wine": "Vietti 'Tre Vigne' Barbera d'Asti, Piedmont 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 66.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "841",
+      "wine": "Mauro Veglio, Barolo, Piedmont 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 110.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "834",
+      "wine": "Produttori, Barbaresco, Piedmont 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 112.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "835",
+      "wine": "Piancornello, Brunello di Montalcino, Tuscany 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 118.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "808",
+      "wine": "Castello Banfi, Brunello di Montalcino, Tuscany 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 139.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "837",
+      "wine": "Damilano 'Cannubi', Barolo, Piedmont 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 182.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "851",
+      "wine": "La Fiorita, Brunello di Montalcino Riserva, Tuscany 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 240.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "ITALY",
+      "bin": "806",
+      "wine": "Tenuta San Guido 'Sassicaia', Bolgheri 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 468.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SPAIN",
+      "bin": "839",
+      "wine": "Juan Gil '18 Meses' Monastrell, Jumilla 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 88.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SPAIN",
+      "bin": "833",
+      "wine": "Ramirez de la Piscina Gran Reserva, Rioja 2017",
+      "vintage": "2017",
+      "prices": {
+        "bottle": 95.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SPAIN",
+      "bin": "821",
+      "wine": "La Rioja Alta Viña Ardanza Reserva, Rioja 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 102.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SPAIN",
+      "bin": "829",
+      "wine": "La Rioja Alta Gran Reserva '904', Rioja 2015",
+      "vintage": "2015",
+      "prices": {
+        "bottle": 192.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SYRAH & SHIRAZ",
+      "bin": "200",
+      "wine": "Stolpman Estate Syrah, Ballard Canyon, Santa Barbara, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 71.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SYRAH & SHIRAZ",
+      "bin": "704",
+      "wine": "Beckmen Purisima Mountain Vineyard Syrah, Central Coast, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 82.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SYRAH & SHIRAZ",
+      "bin": "910",
+      "wine": "Domaine Faury 'Les Ribaudes', St Joseph, Northern Rhône, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 94.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SOUTHERN RHÔNE & NEW WORLD 'RHÔNE'",
+      "bin": "905",
+      "wine": "Les Paillières 'Terrasse du Diable', Gigondas, Southern Rhône, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 108.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SOUTHERN RHÔNE & NEW WORLD 'RHÔNE'",
+      "bin": "708",
+      "wine": "Orin Swift 'Machete', Napa Valley, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 123.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SOUTHERN RHÔNE & NEW WORLD 'RHÔNE'",
+      "bin": "911",
+      "wine": "Château Mont-Redon, Châteauneuf-du-Pape, Southern Rhône, France 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 131.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SOUTHERN RHÔNE & NEW WORLD 'RHÔNE'",
+      "bin": "916",
+      "wine": "Domaine la Barroche, Châteauneuf-du-Pape, Southern Rhône, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 135.0
+      }
+    },
+    {
+      "page": 7,
+      "section": "Bottle List",
+      "category": "SOUTHERN RHÔNE & NEW WORLD 'RHÔNE'",
+      "bin": "909",
+      "wine": "Vieux Télégraphe 'La Crau', Chateauneuf-du-Pape, Southern Rhône, France 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 222.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "510",
+      "wine": "Gundlach Bundschu Mountain Cuvée, Sonoma, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 68.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "505",
+      "wine": "Dry Creek 'The Mariner', Dry Creek Valley, Sonoma, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 90.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "509",
+      "wine": "Crosshatch 'Depth', Santa Ynez, Santa Barbara, CA 2018",
+      "vintage": "2018",
+      "prices": {
+        "bottle": 112.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "947",
+      "wine": "Château Cantemerle, Haut-Médoc, Bordeaux, France 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 114.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "512",
+      "wine": "Ancient Peaks 'Oyster Ridge', Paso Robles, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 114.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "517",
+      "wine": "Justin Vineyards 'Justification', Paso Robles, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 125.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "949",
+      "wine": "Château de Pez, Saint-Estèphe, Bordeaux, France 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 129.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "548",
+      "wine": "Justin Vineyards 'Isosceles', Paso Robles, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 140.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "931",
+      "wine": "Château Lasségue, Saint-Émilion Grand Cru, Bordeaux, France 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 150.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "926",
+      "wine": "Château Talbot Grand Cru Classé, St-Julien, Bordeaux 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 184.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "536",
+      "wine": "Continuum, Pritchard Hill, Napa Valley, California 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 526.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "BORDEAUX & NEW WORLD 'BORDEAUX'",
+      "bin": "530",
+      "wine": "Opus One, Oakville, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 688.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "200",
+      "wine": "Six Stack by Markham Vineyards, North Coast, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 61.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "527",
+      "wine": "Markham Vineyards, Napa Valley, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 73.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "502",
+      "wine": "Chateau Ste. Michelle 'Canoe Ridge', Columbia Valley, WA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 82.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "511",
+      "wine": "Stags' Leap Winery, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 84.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "525",
+      "wine": "Trefethen Family, Oak Knoll District, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 94.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "503",
+      "wine": "Duckhorn Vineyards 'Three Palms Vineyard', Napa Valley, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 216.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MERLOT",
+      "bin": "508",
+      "wine": "Pahlmeyer, Napa Valley, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 222.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MALBEC",
+      "bin": "200",
+      "wine": "Catena 'Vista Flores', Mendoza, Argentina 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 57.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MALBEC",
+      "bin": "813",
+      "wine": "Tikal 'Patriota', Uco Valley, Mendoza, Argentina 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 65.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MALBEC",
+      "bin": "811",
+      "wine": "Mendel, Mendoza, Argentina 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 71.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "MALBEC",
+      "bin": "812",
+      "wine": "Luca 'Old Vines', Uco Valley, Mendoza, Argentina 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 89.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "200",
+      "wine": "Ancient Peaks 'Santa Margarita Ranch', Paso Robles, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 57.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "801",
+      "wine": "Zuccardi Q Series, Uco Valley, Mendoza, Argentina 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 69.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "200",
+      "wine": "Truchard Vineyards, Carneros, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 81.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "633",
+      "wine": "Canvasback, Red Mountain, WA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 88.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "602",
+      "wine": "Buehler Vineyards, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 88.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "640",
+      "wine": "Roots Run Deep 'Bound and Determined', Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 90.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "620",
+      "wine": "Onx 'Caliber', Templeton Gap, Paso Robles, CA 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 102.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "657",
+      "wine": "Adelaida Vineyards, Adelaida District, Paso Robles, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 110.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "614",
+      "wine": "Sequoia Grove, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 119.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "200",
+      "wine": "Duckhorn Vineyards, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 123.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "617",
+      "wine": "Peju, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 133.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "608",
+      "wine": "Jordan, Alexander Valley, Sonoma, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 149.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "607",
+      "wine": "Heitz Cellar, Napa Valley, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 170.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "613",
+      "wine": "Stag's Leap Wine Cellars 'Artemis', Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 170.0
+      }
+    },
+    {
+      "page": 8,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "615",
+      "wine": "Groth Vineyards, Oakville, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 177.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "699",
+      "wine": "Silver Oak, Alexander Valley, Sonoma, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 184.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "603",
+      "wine": "Cakebread Cellars, Napa Valley, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 188.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "609",
+      "wine": "Lail 'Blueprint', Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 207.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "604",
+      "wine": "Caymus, Napa Valley, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 209.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "627",
+      "wine": "Nickel & Nickel 'Vaca Vista Vineyard', Oak Knoll Dist., Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 222.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "605",
+      "wine": "Chimney Rock, Stag's Leap District, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 241.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "531",
+      "wine": "Eisele Vineyards 'Altagracia', Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 258.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "630",
+      "wine": "Silver Oak, Napa Valley, CA 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 283.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "632",
+      "wine": "Daou 'Soul of a Lion', Adelaida District, Paso Robles, CA 2021",
+      "vintage": "2021",
+      "prices": {
+        "bottle": 286.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "628",
+      "wine": "Heitz Cellar 'Trailside Vineyard', Rutherford, Napa Valley, CA 2017",
+      "vintage": "2017",
+      "prices": {
+        "bottle": 296.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "606",
+      "wine": "Plumpjack, Oakville, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 322.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "3014",
+      "wine": "Silver Oak, Alexander Valley, Sonoma, CA (1.5 Liter) 2020",
+      "vintage": "2020",
+      "prices": {
+        "bottle": 376.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "622",
+      "wine": "Stag's Leap Wine Cellars S.L.V., Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 399.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "631",
+      "wine": "Caymus 'Special Selection', Napa Valley, CA 2019",
+      "vintage": "2019",
+      "prices": {
+        "bottle": 425.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "646",
+      "wine": "Heitz Cellar 'Martha's Vineyard', Oakville, Napa Valley, CA 2017",
+      "vintage": "2017",
+      "prices": {
+        "bottle": 508.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "CABERNET SAUVIGNON",
+      "bin": "3015",
+      "wine": "Silver Oak, Napa Valley, CA (1.5 Liter) 2018",
+      "vintage": "2018",
+      "prices": {
+        "bottle": 639.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "200",
+      "wine": "Turley 'Juvenile' Zinfandel, CA 2024",
+      "vintage": "2024",
+      "prices": {
+        "bottle": 63.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "706",
+      "wine": "Seghesio Family Vineyards, Sonoma, CA 2023",
+      "vintage": "2023",
+      "prices": {
+        "bottle": 66.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "709",
+      "wine": "Dry Creek Vineyard 'Heritage' Zinfandel, Sonoma, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 70.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "815",
+      "wine": "Casa Lapostolle 'Cuvee Alexandre' Carménère, Colchagua Valley, Chile 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 72.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "714",
+      "wine": "Frank Family Zinfandel, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 89.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "733",
+      "wine": "The Prisoner, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 106.0
+      }
+    },
+    {
+      "page": 9,
+      "section": "Bottle List",
+      "category": "BOLD REDS",
+      "bin": "729",
+      "wine": "Turley 'Rattlesnake Ridge', Howell Mountain, Napa Valley, CA 2022",
+      "vintage": "2022",
+      "prices": {
+        "bottle": 110.0
+      }
+    }
+  ]
+}
