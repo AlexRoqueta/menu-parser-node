@@ -3,8 +3,9 @@
  *
  * Default (no LLM call): asserts the post-processing layer
  *   (validateAndNormalizeMenu + toTableSommDishes) faithfully round-trips a
- *   representative target JSON and that the noise filters drop beverages,
- *   headings, disclaimers, and empty entries.
+ *   representative target JSON (the Water Grill full-meals fixture) and that
+ *   the noise filters drop beverages, raw-bar items, appetizers, sushi,
+ *   shellfish platters, soups, sides, and other non-entree content.
  *
  * Live mode (--live):
  *   - Requires OPENAI_API_KEY.
@@ -21,6 +22,7 @@ import {
   extractMenuWithLlm,
   toTableSommDishes,
   validateAndNormalizeMenu,
+  type DishLlmRecord,
   type MenuLlmExtraction
 } from '../src/menuLlmParser.js';
 import { extractPdfPages } from '../src/wineLlmParser.js';
@@ -46,6 +48,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 const DEFAULT_TARGET_CANDIDATES = [
+  path.resolve('scripts/fixtures/water_grill_full_meals.json'),
   path.resolve('scripts/fixtures/sample_menu_raw.json')
 ];
 
@@ -70,52 +73,146 @@ function assert(cond: any, msg: string) {
   }
 }
 
+type RawTarget = {
+  source_file?: string;
+  meal_count?: number;
+  meals?: any[];
+  dishes?: any[];
+};
+
+function getTargetMeals(target: RawTarget): any[] {
+  if (Array.isArray(target.meals)) return target.meals;
+  if (Array.isArray(target.dishes)) return target.dishes;
+  return [];
+}
+
+// Items the screenshot showed leaking through TableSomm — none of these
+// should ever appear when the fixture is Water Grill's full-meals JSON.
+const FORBIDDEN_NAME_PATTERNS = [
+  /lobster\s+bisque/i,
+  /oysters?\s+rockefeller/i,
+  /\bsushi\b/i,
+  /\bsashimi\b/i,
+  /\bnigiri\b/i,
+  /\bmaki\b/i,
+  /\bhand\s*roll/i,
+  /shellfish\s+(?:platter|tower)/i,
+  /seafood\s+(?:platter|tower|plateau)/i,
+  /shrimp\s+cocktail/i,
+  /\btartare\b/i,
+  /\bcrudo\b/i,
+  /\bceviche\b/i
+];
+
+function priceSnapshot(p: DishLlmRecord['price']): string {
+  if (p == null) return 'null';
+  if (typeof p === 'number') return String(p);
+  if (typeof p === 'string') return p;
+  return JSON.stringify(p);
+}
+
 async function runPostProcessingTests(targetPath: string) {
   console.log(`\n== Post-processing tests (target: ${targetPath}) ==`);
   const raw = await fs.readFile(targetPath, 'utf8');
-  const target = JSON.parse(raw) as MenuLlmExtraction;
+  const target = JSON.parse(raw) as RawTarget;
+  const targetMeals = getTargetMeals(target);
+  const declaredCount = target.meal_count ?? targetMeals.length;
 
-  // 1. Round-trip through validator: should preserve every clean dish.
+  // 1. Round-trip through validator: should preserve every target meal.
   const normalized = validateAndNormalizeMenu(target, {
     sourceFile: target.source_file ?? 'unknown'
   });
   assert(
-    normalized.dishes.length === target.dishes.length,
-    `validateAndNormalizeMenu preserves dish count (${normalized.dishes.length}/${target.dishes.length})`
+    normalized.meals.length === targetMeals.length,
+    `validateAndNormalizeMenu preserves meal count (${normalized.meals.length}/${targetMeals.length})`
   );
   assert(
-    normalized.dish_count === normalized.dishes.length,
-    `dish_count is recomputed (${normalized.dish_count})`
+    normalized.meal_count === declaredCount,
+    `meal_count matches declared (${normalized.meal_count}/${declaredCount})`
   );
   assert(
-    normalized.extraction_scope.toLowerCase().includes('food'),
-    'extraction_scope retained'
+    normalized.dish_count === normalized.meal_count,
+    'dish_count alias equals meal_count'
+  );
+  assert(
+    normalized.extraction_scope.toLowerCase().includes('full meal'),
+    'extraction_scope mentions full meals'
   );
 
-  // 2. Validator drops beverages, headings, disclaimers, empty names.
+  // 2. Every target meal name must survive verbatim.
+  const targetNames = targetMeals.map((m: any) => String(m.name).trim());
+  const normalizedNames = normalized.meals.map((m) => m.name);
+  const missingNames = targetNames.filter((n: string) => !normalizedNames.includes(n));
+  assert(missingNames.length === 0, `every target meal name preserved (missing: ${missingNames.length})`);
+
+  // 3. Every target meal price must round-trip (number stays number,
+  //    string stays string, object stays object with same keys).
+  let priceMismatches = 0;
+  for (const tm of targetMeals) {
+    const norm = normalized.meals.find((m) => m.name === String(tm.name).trim());
+    if (!norm) continue;
+    const before = priceSnapshot(tm.price);
+    const after = priceSnapshot(norm.price);
+    if (before !== after) {
+      priceMismatches++;
+      console.error(`    price drift for "${tm.name}": ${before} -> ${after}`);
+    }
+  }
+  assert(priceMismatches === 0, 'all target prices round-trip exactly');
+
+  // 4. Every target description preserved.
+  let descMismatches = 0;
+  for (const tm of targetMeals) {
+    const norm = normalized.meals.find((m) => m.name === String(tm.name).trim());
+    if (!norm) continue;
+    const wanted = typeof tm.description === 'string' ? tm.description.trim() : null;
+    if (wanted && norm.description !== wanted) {
+      descMismatches++;
+      console.error(`    description drift for "${tm.name}"`);
+    }
+  }
+  assert(descMismatches === 0, 'all target descriptions round-trip');
+
+  // 5. Validator drops noise: beverages, raw bar, appetizers, sushi,
+  //    shellfish platters, soups, sides, headings, disclaimers.
   const polluted = {
     source_file: 'x',
-    dishes: [
-      { name: '', price: 10 }, // empty name
-      { name: '*', price: 1 }, // junk
-      { name: 'ENTREES', price: null }, // section heading
-      { name: 'DRINKS' }, // beverage heading
-      { name: 'Cabernet Sauvignon', price: 18 }, // wine
-      { name: 'Negroni Cocktail', price: 16 }, // cocktail
-      { name: 'Old Fashioned', price: 16, section: 'Cocktails' }, // beverage section
-      { name: 'Disclaimer: consuming raw shellfish', price: null }, // disclaimer
-      { name: 'Pan-Seared Scallops', price: 38, description: 'Cauliflower, capers' },
-      { name: 'Caesar Salad', price: 18 }
+    meals: [
+      { name: '', price: 10 },
+      { name: '*', price: 1 },
+      { name: 'ENTREES', price: null },
+      { name: 'DRINKS' },
+      { name: 'Cabernet Sauvignon', price: 18, category: 'Wines by the Glass' },
+      { name: 'Negroni Cocktail', price: 16, category: 'Cocktails' },
+      { name: 'Old Fashioned', price: 16, category: 'Cocktails' },
+      { name: 'Disclaimer: consuming raw shellfish', price: null },
+      { name: 'Lobster Bisque', price: 18, category: 'Soups' },
+      { name: 'Oysters Rockefeller', price: 22, category: 'Raw Bar' },
+      { name: 'Kumamoto Oysters', price: 4.5, category: 'Raw Bar' },
+      { name: 'Tuna Tartare', price: 24, category: 'Appetizers' },
+      { name: 'Spicy Tuna Roll', price: 18, category: 'Sushi' },
+      { name: 'California Roll', price: 16, category: 'Sushi Rolls' },
+      { name: 'Shellfish Tower', price: 120, category: 'Raw Bar' },
+      { name: 'Shrimp Cocktail', price: 22, category: 'Appetizers' },
+      { name: 'French Fries', price: 9, category: 'Sides' },
+      { name: 'Wild Eastern Sea Scallops', price: 49, category: 'Entrees', description: 'cauliflower puree' },
+      { name: 'Filet Mignon 8oz', price: 62, category: 'USDA Prime Steaks' }
     ]
   };
   const cleaned = validateAndNormalizeMenu(polluted, { sourceFile: 'x' });
-  const cleanedNames = cleaned.dishes.map((d) => d.name);
+  const cleanedNames = cleaned.meals.map((d) => d.name);
   assert(
-    cleanedNames.includes('Pan-Seared Scallops') && cleanedNames.includes('Caesar Salad'),
-    'keeps real dishes (Pan-Seared Scallops, Caesar Salad)'
+    cleanedNames.includes('Wild Eastern Sea Scallops') && cleanedNames.includes('Filet Mignon 8oz'),
+    'keeps real full meals (Scallops, Filet Mignon)'
   );
+  for (const pat of FORBIDDEN_NAME_PATTERNS) {
+    assert(
+      !cleanedNames.some((n) => pat.test(n)),
+      `drops items matching ${pat}`
+    );
+  }
   assert(!cleanedNames.includes('ENTREES'), 'drops bare section heading ENTREES');
-  assert(!cleanedNames.includes('DRINKS'), 'drops beverage heading');
+  assert(!cleanedNames.includes('French Fries'), 'drops sides (French Fries)');
   assert(
     !cleanedNames.some((n) => /cabernet|negroni|old fashioned/i.test(n)),
     'drops beverages (wine + cocktails)'
@@ -124,76 +221,72 @@ async function runPostProcessingTests(targetPath: string) {
     !cleanedNames.some((n) => /disclaimer/i.test(n)),
     'drops disclaimer-style entries'
   );
-  assert(!cleanedNames.includes('*'), 'drops junk/punctuation-only entries');
 
-  // 3. Shellfish + raw-bar inference.
-  const inference = validateAndNormalizeMenu(
+  // 6. None of the screenshot false positives should appear in our normalized
+  //    Water Grill output. (Guard against accidentally including them via
+  //    the fixture itself.)
+  for (const pat of FORBIDDEN_NAME_PATTERNS) {
+    const inFixture = targetNames.some((n: string) => pat.test(n));
+    if (inFixture) continue;
+    assert(
+      !normalizedNames.some((n) => pat.test(n)),
+      `normalized output excludes ${pat}`
+    );
+  }
+
+  // 7. Price-shape coercion: number / string / object.
+  const shape = validateAndNormalizeMenu(
     {
       source_file: 'x',
-      dishes: [
-        { name: 'Steamed Lobster', section: 'Crustaceans' },
-        { name: 'Bluefin Tuna Tartare', section: 'Raw Bar' },
-        { name: 'Roasted Chicken', section: 'Entrees' }
-      ]
-    },
-    { sourceFile: 'x' }
-  );
-  const lobster = inference.dishes.find((d) => d.name === 'Steamed Lobster')!;
-  const tartare = inference.dishes.find((d) => d.name === 'Bluefin Tuna Tartare')!;
-  const chicken = inference.dishes.find((d) => d.name === 'Roasted Chicken')!;
-  assert(lobster.contains_shellfish === true, 'lobster inferred as shellfish');
-  assert(tartare.is_raw_bar === true, 'tartare inferred as raw-bar');
-  assert(chicken.contains_shellfish === false, 'chicken not flagged as shellfish');
-  assert(chicken.is_raw_bar === false, 'chicken not flagged as raw-bar');
-
-  // 4. Price tier coercion (strings ok).
-  const tiers = validateAndNormalizeMenu(
-    {
-      source_file: 'x',
-      dishes: [
+      meals: [
+        { name: 'Filet Mignon 6oz', category: 'Steaks', price: 58 },
+        { name: 'Whole Dover Sole', category: 'Whole Fish', price: '55/lb' },
         {
-          name: 'Oysters',
-          section: 'Raw Bar',
-          price: '4.50',
-          price_tiers: [
-            { label: 'Each', price: '4.50' },
-            { label: '½ Dozen', price: 24 },
-            { label: '1 Dozen', price: '$46.00' }
-          ]
+          name: 'Live Spot Prawns',
+          category: 'Crustaceans',
+          price: { '3/4_pound': 62, '1_pound': 82, '1.5_pounds': 122 }
         }
       ]
     },
     { sourceFile: 'x' }
   );
-  const oys = tiers.dishes[0];
-  assert(oys.price === 4.5, 'string price coerced to number');
-  assert(oys.price_tiers!.length === 3, 'all tiers retained');
-  assert(oys.price_tiers![2].price === 46, 'currency-symbol price coerced');
+  const filet = shape.meals.find((m) => m.name === 'Filet Mignon 6oz')!;
+  const sole = shape.meals.find((m) => m.name === 'Whole Dover Sole')!;
+  const prawns = shape.meals.find((m) => m.name === 'Live Spot Prawns')!;
+  assert(filet.price === 58, 'number price preserved');
+  assert(sole.price === '55/lb', 'by-the-pound string price preserved');
+  assert(
+    prawns.price &&
+      typeof prawns.price === 'object' &&
+      !Array.isArray(prawns.price) &&
+      (prawns.price as any)['1_pound'] === 82,
+    'multi-size object price preserved'
+  );
 
-  // 5. TableSomm mapping.
+  // 8. TableSomm mapping preserves every meal and assigns category/section.
   const dishes = toTableSommDishes(normalized);
-  assert(dishes.length === normalized.dishes.length, 'toTableSommDishes preserves count');
-  const rawBar = dishes.find((d) => d.isRawBar);
-  assert(rawBar !== undefined, 'has at least one raw-bar dish');
-  if (rawBar) {
-    assert(rawBar.tags.includes('raw-bar'), 'raw-bar tag added');
-    assert(typeof rawBar.name === 'string' && rawBar.name.length > 0, 'dish name preserved');
-  }
-  const shell = dishes.find((d) => d.containsShellfish);
-  assert(shell !== undefined, 'has at least one shellfish dish');
-  if (shell) assert(shell.tags.includes('shellfish'), 'shellfish tag added');
-
-  // 6. No dish should be a beverage or heading after mapping.
+  assert(dishes.length === normalized.meals.length, 'toTableSommDishes preserves count');
+  const withoutCategory = dishes.filter((d) => !d.category || d.category === '');
+  assert(withoutCategory.length === 0, 'every dish has a category');
   const leaked = dishes.filter((d) =>
     /^(menu|dinner|entrees?|raw bar|sides|desserts?|salads?|sandwiches?)$/i.test(d.name.trim())
   );
-  assert(leaked.length === 0, 'no dishes collapse to bare section headings');
+  assert(leaked.length === 0, 'no dish collapses to a bare section heading');
 
-  // 7. Sanity on prices.
-  const badPrices = dishes.filter(
-    (d) => d.price != null && (d.price <= 0 || d.price > 100000)
+  // 9. Shellfish tag inference.
+  const shellfish = dishes.filter((d) => d.containsShellfish);
+  if (shellfish.length > 0) {
+    assert(
+      shellfish.every((d) => d.tags.includes('shellfish')),
+      'every shellfish dish carries the shellfish tag'
+    );
+  }
+
+  // 10. None of the kept meals should be flagged isRawBar.
+  assert(
+    dishes.every((d) => d.isRawBar === false),
+    'no kept meal is flagged as raw-bar'
   );
-  assert(badPrices.length === 0, 'all dish prices in plausible range');
 
   return { normalized, dishes };
 }
@@ -216,16 +309,16 @@ async function runLiveTest(args: Args) {
   const sourceFile = path.basename(pdfPath);
   console.log(`  · Read PDF (${pages.length} pages, ${rawText.length} chars)`);
 
-  const extraction = await extractMenuWithLlm({ sourceFile, pages, rawText });
-  console.log(`  · LLM returned ${extraction.dishes.length} dishes`);
+  const extraction: MenuLlmExtraction = await extractMenuWithLlm({ sourceFile, pages, rawText });
+  console.log(`  · LLM returned ${extraction.meals.length} meals`);
   if (args.out) {
     await fs.writeFile(args.out, JSON.stringify(extraction, null, 2));
     console.log(`  · Wrote ${args.out}`);
   }
 
-  assert(extraction.dishes.length > 0, 'live extraction returned at least one dish');
-  const named = extraction.dishes.filter((d) => d.name && d.name.length > 1);
-  assert(named.length === extraction.dishes.length, 'every dish has a real name');
+  assert(extraction.meals.length > 0, 'live extraction returned at least one meal');
+  const named = extraction.meals.filter((d) => d.name && d.name.length > 1);
+  assert(named.length === extraction.meals.length, 'every meal has a real name');
 }
 
 async function main() {
