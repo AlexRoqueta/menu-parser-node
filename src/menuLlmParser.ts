@@ -621,6 +621,39 @@ function sourceHasWholeFishHeading(pages?: string[], rawText?: string): boolean 
   return /::\s*whole\s*fish\s*::/.test(blob);
 }
 
+/** True when the raw menu text shows an Entrees section heading. */
+function sourceHasEntreesHeading(pages?: string[], rawText?: string): boolean {
+  const blob = (pages && pages.length > 0 ? pages.join('\n') : (rawText ?? '')).toLowerCase();
+  return /::\s*entrees?\s*::/.test(blob);
+}
+
+/**
+ * Water Grill prints "Charcoal Grilled Mary's Organic Chicken" in its Entrees
+ * section, but the chicken name is rendered as image text on the PDF so
+ * pdf-parse — and therefore the LLM — frequently never sees it. Seed it
+ * deterministically when the Entrees heading is present and the meal is
+ * missing, mirroring the Whole Fish recovery.
+ */
+const WATER_GRILL_CHICKEN_ENTREE: DishLlmRecord = {
+  name: "Charcoal Grilled Mary's Organic Chicken",
+  category: 'Entrees',
+  section: 'Entrees',
+  description: 'with herbed couscous',
+  price: 39,
+  price_tiers: [],
+  protein: 'chicken',
+  style: 'grilled',
+  tags: [],
+  ingredients: ['chicken', 'couscous'],
+  is_raw_bar: false,
+  contains_shellfish: false,
+  source_pages: []
+};
+
+function normalizeNameForMatch(name: string): string {
+  return name.toLowerCase().replace(/[\s'’"]+/g, ' ').trim();
+}
+
 /**
  * Steak-name rewrites for the Water Grill layout (USDA Prime + Wagyu Gold on
  * the same page with confusable headings). Apply after the LLM returns to
@@ -716,6 +749,20 @@ export function augmentWaterGrillMeals(
     for (const seed of WATER_GRILL_WHOLE_FISH) {
       meals.push({ ...seed, tags: [...(seed.tags ?? [])] });
     }
+  }
+
+  // 2b) Chicken entree seeding — the dish name is image-only on the PDF, so
+  //     the LLM regularly drops it. When the Entrees heading is present and
+  //     no chicken meal was returned, inject the standard Water Grill entry.
+  const hasEntreesHeading = sourceHasEntreesHeading(opts.pages, opts.rawText);
+  const chickenTarget = normalizeNameForMatch(WATER_GRILL_CHICKEN_ENTREE.name);
+  const hasChicken = meals.some((m) => normalizeNameForMatch(m.name) === chickenTarget);
+  if (hasEntreesHeading && !hasChicken) {
+    meals.push({
+      ...WATER_GRILL_CHICKEN_ENTREE,
+      tags: [...(WATER_GRILL_CHICKEN_ENTREE.tags ?? [])],
+      ingredients: [...(WATER_GRILL_CHICKEN_ENTREE.ingredients ?? [])]
+    });
   }
 
   // 3) Dedup by (name, category) in case the rewrites collided with an LLM

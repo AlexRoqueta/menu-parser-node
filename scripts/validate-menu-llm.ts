@@ -561,8 +561,10 @@ async function runLiveShapeSimulation() {
   console.log('\n== Simulated live LLM output augmentation (30 → 35) ==');
   // Reproduce the live diff observed by the parent agent: the LLM returns 30
   // meals — naming the Wagyu steak block in raw uppercase, miscategorizing the
-  // Prime cuts under Wagyu Gold, and omitting Whole Fish entirely. Augmentation
-  // must rewrite the steaks and inject the four Whole Fish species to reach 35.
+  // Prime cuts under Wagyu Gold, omitting Whole Fish entirely, and dropping
+  // the image-rendered "Charcoal Grilled Mary's Organic Chicken" entree.
+  // Augmentation must rewrite the steaks, inject the four Whole Fish species,
+  // and seed the chicken to reach 35.
   const liveLikeMeals = [
     { name: 'Wild Maryland Soft Shell Crab', category: 'Crustaceans', price: 53, description: 'roasted eggplant, coconut rice, bok choy, red curry sauce, peanut brittle' },
     { name: 'Live Wild North American Hard Shell Lobster', category: 'Crustaceans', price: '38/pound', description: 'steamed with homemade coleslaw and melted butter' },
@@ -583,7 +585,8 @@ async function runLiveShapeSimulation() {
     { name: 'Shrimp Scampi', category: 'Entrees', price: 42, description: 'wild mexican jumbo shrimp, pappardelle, garlic oil, white wine butter sauce' },
     { name: 'Wild Eastern Sea Scallops', category: 'Entrees', price: 49, description: 'cauliflower puree, curried roasted cauliflower, pickled golden raisins, soy brown butter' },
     { name: 'Cioppino', category: 'Entrees', price: 45, description: 'dungeness crab, jumbo shrimp, and fresh fish in a shellfish broth' },
-    { name: "Charcoal Grilled Mary's Organic Chicken", category: 'Entrees', price: 39, description: 'with herbed couscous' },
+    // NOTE: "Charcoal Grilled Mary's Organic Chicken" intentionally omitted —
+    // it is image-rendered on the source PDF and dropped by the live LLM.
     { name: 'Filet Mignon 6oz Petite Cut', category: 'USDA Prime Steaks', price: 58 },
     { name: 'Filet Mignon 8oz Center Cut', category: 'USDA Prime Steaks', price: 62 },
     { name: 'Filet Mignon 10oz Center Cut', category: 'USDA Prime Steaks', price: 72 },
@@ -598,7 +601,7 @@ async function runLiveShapeSimulation() {
   ];
   // Two Filet Mignons with same name but distinct category should both survive
   // normalization because dedup is by (name, category). Verify that.
-  assert(liveLikeMeals.length === 31, `live-like fixture has 31 records (got ${liveLikeMeals.length})`);
+  assert(liveLikeMeals.length === 30, `live-like fixture has 30 records (got ${liveLikeMeals.length})`);
 
   const normalized = validateAndNormalizeMenu(
     { source_file: 'WaterGrillDinnermenu.pdf', meals: liveLikeMeals },
@@ -606,7 +609,7 @@ async function runLiveShapeSimulation() {
   );
   const pdfPagesShim = [
     ':: WHOLE FISH ::\nCHARCOAL GRILLED OR WHOLE CRISPY FRIED (+4.50)',
-    ':: USDA PRIME STEAKS ::\nFILET MIGNON\n:: WAGYU GOLD ::\nNEW YORK STEAK'
+    ':: ENTREES ::\nWILD ICELANDIC COD FISH & CHIPS\n:: USDA PRIME STEAKS ::\nFILET MIGNON\n:: WAGYU GOLD ::\nNEW YORK STEAK'
   ];
   const augmented = augmentWaterGrillMeals(normalized, { pages: pdfPagesShim });
   assert(
@@ -624,7 +627,8 @@ async function runLiveShapeSimulation() {
     'Wild New Zealand Pink Bream',
     'Wild Massachusetts Black Sea Bass',
     'Wild Brittany Dover Sole',
-    'Farmed Greek Black Bream'
+    'Farmed Greek Black Bream',
+    "Charcoal Grilled Mary's Organic Chicken"
   ];
   const augNames = augmented.meals.map((m) => m.name);
   for (const n of expectedNames) {
@@ -647,6 +651,37 @@ async function runLiveShapeSimulation() {
   assert(primeNYStripCat === 'USDA Prime Steaks', 'Prime New York Strip 14oz is USDA Prime Steaks');
   const primeRibeyeCat = augmented.meals.find((m) => m.name === 'Prime Ribeye 16oz')?.category;
   assert(primeRibeyeCat === 'USDA Prime Steaks', 'Prime Ribeye 16oz is USDA Prime Steaks');
+
+  // Chicken seeding checks — image-rendered name dropped by live LLM, restored
+  // by augmentWaterGrillMeals when ":: ENTREES ::" appears in source text.
+  const chicken = augmented.meals.find(
+    (m) => m.name === "Charcoal Grilled Mary's Organic Chicken"
+  );
+  assert(chicken != null, "augmented output includes Charcoal Grilled Mary's Organic Chicken");
+  assert(chicken?.category === 'Entrees', 'seeded chicken is in Entrees category');
+  assert(chicken?.price === 39, 'seeded chicken price is 39');
+  assert(chicken?.description === 'with herbed couscous', 'seeded chicken description preserved');
+
+  // Idempotence: a second pass must not duplicate the chicken (or any other seed).
+  const rerun = augmentWaterGrillMeals(augmented, { pages: pdfPagesShim });
+  const chickenCount = rerun.meals.filter(
+    (m) => m.name === "Charcoal Grilled Mary's Organic Chicken"
+  ).length;
+  assert(chickenCount === 1, `chicken seed is idempotent (count=${chickenCount})`);
+  assert(rerun.meal_count === 35, `re-augmentation stays at 35 meals (got ${rerun.meal_count})`);
+
+  // Skip condition: no Entrees heading in source → no chicken seeded.
+  const noEntreesAugmented = augmentWaterGrillMeals(
+    validateAndNormalizeMenu(
+      { source_file: 'x', meals: [{ name: 'Cioppino', category: 'Entrees', price: 45 }] },
+      { sourceFile: 'x' }
+    ),
+    { pages: ['no entree heading here'] }
+  );
+  assert(
+    !noEntreesAugmented.meals.some((m) => m.name === "Charcoal Grilled Mary's Organic Chicken"),
+    'no chicken seeded when Entrees heading missing from source'
+  );
 }
 
 async function runLiveTest(args: Args) {
