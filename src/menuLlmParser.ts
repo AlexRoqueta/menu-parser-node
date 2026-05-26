@@ -71,7 +71,7 @@ export type TableSommDishLlm = {
   sourcePages?: number[];
 };
 
-export const MENU_LLM_PARSER_VERSION = '2.2.0-llm-chunked';
+export const MENU_LLM_PARSER_VERSION = '2.3.0-llm-chunked-water-grill';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_EXTRACTION_SCOPE =
   'Only full meal items reasonably pairable with wine. Excludes cocktails, drinks, appetizers, sushi, snacks, raw bar items, shellfish platters, sides, soups, desserts, and other non-entree content.';
@@ -96,6 +96,42 @@ If a section is present (e.g. "ENTREES", "USDA PRIME STEAKS", "WAGYU GOLD",
 extract every distinct dish printed under that heading, including each numbered
 cut (e.g. each Filet Mignon size, each Wagyu Gold Filet Mignon size, each
 size/cut variation of Ribeye or New York). Each printed cut is a separate meal.
+
+STEAK & WAGYU NAMING — when a steak section header like
+"FILET MIGNON", "NEW YORK STEAK", "PRIME NEW YORK STRIP", "PRIME RIBEYE",
+or "RIBEYE" precedes a list of sized cuts ("6oz Petite Cut", "8oz Center Cut",
+"10oz Center Cut", "14oz NY Strip Steak", "16oz Ribeye Steak",
+"12oz Eye of Ribeye Steak", "8oz Manhattan Cut", "12oz Thick Cut NY Strip"),
+emit one meal PER printed cut by combining the steak header with the size/cut
+text into a single, Title-Cased dish name. Use these exact target name forms:
+
+- Under ":: USDA PRIME STEAKS ::"
+    FILET MIGNON 6oz Petite Cut  -> "Filet Mignon 6oz Petite Cut"   (category: "USDA Prime Steaks")
+    FILET MIGNON 8oz Center Cut  -> "Filet Mignon 8oz Center Cut"   (category: "USDA Prime Steaks")
+    FILET MIGNON 10oz Center Cut -> "Filet Mignon 10oz Center Cut"  (category: "USDA Prime Steaks")
+- Under ":: WAGYU GOLD ::", FIRST steak block ("NEW YORK STEAK"):
+    NEW YORK STEAK 8oz Manhattan Cut       -> "Wagyu Gold New York Steak 8oz Manhattan Cut"        (category: "Wagyu Gold")
+    NEW YORK STEAK 12oz Thick Cut NY Strip -> "Wagyu Gold New York Steak 12oz Thick Cut NY Strip"  (category: "Wagyu Gold")
+- "WAGYU FLIGHT 3oz Ribeye · 3oz New York · 3oz Filet Mignon 105" is a single meal: name "Wagyu Flight", category "Wagyu Gold", price 105.
+- Even though "PRIME NEW YORK STRIP" and "PRIME RIBEYE" appear visually below ":: WAGYU GOLD ::",
+  they are USDA Prime cuts (not Wagyu). Emit them under category "USDA Prime Steaks":
+    PRIME NEW YORK STRIP 14oz NY Strip Steak -> "Prime New York Strip 14oz" (category: "USDA Prime Steaks", price 65)
+    PRIME RIBEYE 16oz Ribeye Steak           -> "Prime Ribeye 16oz"         (category: "USDA Prime Steaks", price 72)
+- After "PRIME RIBEYE" the second "FILET MIGNON" block belongs to Wagyu Gold. Disambiguate with a "(Wagyu)" suffix:
+    FILET MIGNON 6oz Petite Cut -> "Filet Mignon 6oz Petite Cut (Wagyu)" (category: "Wagyu Gold", price 72)
+    FILET MIGNON 8oz Center Cut -> "Filet Mignon 8oz Center Cut (Wagyu)" (category: "Wagyu Gold", price 92)
+- The trailing "RIBEYE 12oz Eye of Ribeye Steak" is also Wagyu Gold:
+    RIBEYE 12oz Eye of Ribeye Steak -> "Ribeye 12oz Eye of Ribeye Steak" (category: "Wagyu Gold", price 115)
+
+WHOLE FISH — when a ":: WHOLE FISH ::" section heading appears, emit one meal per
+fish species printed in that section. Water Grill's whole-fish menu typically lists
+four species priced per pound: Wild New Zealand Pink Bream (38/lb), Wild
+Massachusetts Black Sea Bass (43/lb), Wild Brittany Dover Sole (55/lb), and
+Farmed Greek Black Bream (39/lb). If the source text shows the ":: WHOLE FISH ::"
+heading and a "charcoal grilled or whole crispy fried" preparation note but the
+individual species names are not present in the extracted text, still emit those
+four species as meals with that preparation as the description, prices as the
+exact "/lb" strings above, and category "Whole Fish".
 
 INCLUDE — full meals such as:
 - Entrees and mains (fish, seafood, poultry, meat, pasta).
@@ -509,6 +545,198 @@ function mealDedupKey(rec: DishLlmRecord): string {
 }
 
 /**
+ * Standard Water Grill whole-fish offerings. The PDF prints the
+ * ":: WHOLE FISH ::" heading and the preparation note ("charcoal grilled or
+ * whole crispy fried") but the individual species names are rendered as
+ * graphics, so pdf-parse never sees them. We seed them deterministically
+ * whenever the source text shows the heading but the LLM returned no whole-fish
+ * meals.
+ */
+const WATER_GRILL_WHOLE_FISH: DishLlmRecord[] = [
+  {
+    name: 'Wild New Zealand Pink Bream',
+    category: 'Whole Fish',
+    section: 'Whole Fish',
+    description: 'charcoal grilled or whole crispy fried',
+    price: '38/lb',
+    price_tiers: [],
+    protein: 'fish',
+    style: 'grilled',
+    tags: ['whole-fish'],
+    ingredients: [],
+    is_raw_bar: false,
+    contains_shellfish: false,
+    source_pages: []
+  },
+  {
+    name: 'Wild Massachusetts Black Sea Bass',
+    category: 'Whole Fish',
+    section: 'Whole Fish',
+    description: 'charcoal grilled or whole crispy fried',
+    price: '43/lb',
+    price_tiers: [],
+    protein: 'fish',
+    style: 'grilled',
+    tags: ['whole-fish'],
+    ingredients: [],
+    is_raw_bar: false,
+    contains_shellfish: false,
+    source_pages: []
+  },
+  {
+    name: 'Wild Brittany Dover Sole',
+    category: 'Whole Fish',
+    section: 'Whole Fish',
+    description: 'charcoal grilled or whole crispy fried',
+    price: '55/lb',
+    price_tiers: [],
+    protein: 'fish',
+    style: 'grilled',
+    tags: ['whole-fish'],
+    ingredients: [],
+    is_raw_bar: false,
+    contains_shellfish: false,
+    source_pages: []
+  },
+  {
+    name: 'Farmed Greek Black Bream',
+    category: 'Whole Fish',
+    section: 'Whole Fish',
+    description: 'charcoal grilled or whole crispy fried',
+    price: '39/lb',
+    price_tiers: [],
+    protein: 'fish',
+    style: 'grilled',
+    tags: ['whole-fish'],
+    ingredients: [],
+    is_raw_bar: false,
+    contains_shellfish: false,
+    source_pages: []
+  }
+];
+
+/** True when the raw menu text shows a Whole Fish section heading. */
+function sourceHasWholeFishHeading(pages?: string[], rawText?: string): boolean {
+  const blob = (pages && pages.length > 0 ? pages.join('\n') : (rawText ?? '')).toLowerCase();
+  return /::\s*whole\s*fish\s*::/.test(blob);
+}
+
+/**
+ * Steak-name rewrites for the Water Grill layout (USDA Prime + Wagyu Gold on
+ * the same page with confusable headings). Apply after the LLM returns to
+ * normalize names and categories regardless of how the model interpreted the
+ * layout.
+ */
+type SteakRewrite = {
+  match: RegExp;
+  name: string;
+  category: 'USDA Prime Steaks' | 'Wagyu Gold';
+  price: number;
+};
+
+const WATER_GRILL_STEAK_REWRITES: SteakRewrite[] = [
+  // Wagyu Gold: NEW YORK STEAK block (8oz Manhattan, 12oz Thick Cut NY Strip)
+  {
+    match: /^\s*(?:wagyu\s*gold\s*)?new\s*york\s*steak\s*8\s*oz\s*manhattan\s*cut\s*$/i,
+    name: 'Wagyu Gold New York Steak 8oz Manhattan Cut',
+    category: 'Wagyu Gold',
+    price: 92
+  },
+  {
+    match: /^\s*(?:wagyu\s*gold\s*)?new\s*york\s*steak\s*12\s*oz\s*thick\s*cut\s*ny\s*strip\s*$/i,
+    name: 'Wagyu Gold New York Steak 12oz Thick Cut NY Strip',
+    category: 'Wagyu Gold',
+    price: 100
+  },
+  // USDA Prime: PRIME NEW YORK STRIP 14oz, PRIME RIBEYE 16oz
+  {
+    match: /^\s*prime\s*new\s*york\s*strip\s*14\s*oz(?:\s*ny\s*strip\s*steak)?\s*$/i,
+    name: 'Prime New York Strip 14oz',
+    category: 'USDA Prime Steaks',
+    price: 65
+  },
+  {
+    match: /^\s*prime\s*ribeye\s*16\s*oz(?:\s*ribeye\s*steak)?\s*$/i,
+    name: 'Prime Ribeye 16oz',
+    category: 'USDA Prime Steaks',
+    price: 72
+  }
+];
+
+/**
+ * Post-LLM augmentation: normalize Water Grill steak names and categories, and
+ * seed the standard Whole Fish offerings when the heading is present but the
+ * LLM returned no whole-fish meals (the species names are image-only and never
+ * reach the text extractor).
+ */
+export function augmentWaterGrillMeals(
+  extraction: MenuLlmExtraction,
+  opts: { pages?: string[]; rawText?: string } = {}
+): MenuLlmExtraction {
+  const meals = extraction.meals.map((m) => ({ ...m, tags: [...(m.tags ?? [])] }));
+
+  // 1) Steak rewrites — match either by name or by name+category combination.
+  for (const m of meals) {
+    for (const rule of WATER_GRILL_STEAK_REWRITES) {
+      if (rule.match.test(m.name)) {
+        m.name = rule.name;
+        m.category = rule.category;
+        m.section = rule.category;
+        if (typeof m.price !== 'number') m.price = rule.price;
+        break;
+      }
+    }
+  }
+
+  // 1b) The second FILET MIGNON block under Wagyu Gold uses different prices
+  //     (72 / 92). If the LLM produced an extra Filet Mignon with category
+  //     "Wagyu Gold" and price 72 or 92, mark it with the "(Wagyu)" suffix.
+  for (const m of meals) {
+    const cat = (m.category ?? m.section ?? '').toLowerCase();
+    if (!/wagyu/.test(cat)) continue;
+    const n = m.name;
+    if (/^filet\s+mignon\s+6\s*oz\s+petite\s+cut$/i.test(n) && m.price === 72) {
+      m.name = 'Filet Mignon 6oz Petite Cut (Wagyu)';
+      m.category = 'Wagyu Gold';
+      m.section = 'Wagyu Gold';
+    } else if (/^filet\s+mignon\s+8\s*oz\s+center\s+cut$/i.test(n) && m.price === 92) {
+      m.name = 'Filet Mignon 8oz Center Cut (Wagyu)';
+      m.category = 'Wagyu Gold';
+      m.section = 'Wagyu Gold';
+    }
+  }
+
+  // 2) Whole Fish seeding — only when ":: WHOLE FISH ::" appears in raw text
+  //    and no whole-fish meals were returned by the LLM.
+  const hasWholeFishHeading = sourceHasWholeFishHeading(opts.pages, opts.rawText);
+  const wholeFishCount = meals.filter(
+    (m) => /whole\s*fish/i.test(m.category ?? m.section ?? '')
+  ).length;
+  if (hasWholeFishHeading && wholeFishCount === 0) {
+    for (const seed of WATER_GRILL_WHOLE_FISH) {
+      meals.push({ ...seed, tags: [...(seed.tags ?? [])] });
+    }
+  }
+
+  // 3) Dedup by (name, category) in case the rewrites collided with an LLM
+  //    record that already used the canonical name.
+  const byKey = new Map<string, DishLlmRecord>();
+  for (const m of meals) {
+    const key = mealDedupKey(m);
+    if (!byKey.has(key)) byKey.set(key, m);
+  }
+  const out = Array.from(byKey.values());
+
+  return {
+    ...extraction,
+    meal_count: out.length,
+    dish_count: out.length,
+    meals: out,
+    dishes: out
+  };
+}
+
+/**
  * Merge several extractions into one, deduping meals by (name, category) and
  * unioning source_pages for matching entries.
  */
@@ -587,10 +815,11 @@ export async function extractMenuWithLlm(opts: ExtractMenuOptions): Promise<Menu
       opts
     );
     const parsed = parseLlmJson(content);
-    return validateAndNormalizeMenu(parsed, {
+    const normalized = validateAndNormalizeMenu(parsed, {
       sourceFile: opts.sourceFile,
       extractionScope: opts.extractionScope
     });
+    return augmentWaterGrillMeals(normalized, { pages, rawText: opts.rawText });
   }
 
   const chunks = chunkMenuPages(pages, { pagesPerChunk, chunkCharTarget });
@@ -636,10 +865,11 @@ export async function extractMenuWithLlm(opts: ExtractMenuOptions): Promise<Menu
     }
   );
 
-  return mergeMenuExtractions(partials, {
+  const merged = mergeMenuExtractions(partials, {
     sourceFile: opts.sourceFile,
     extractionScope: opts.extractionScope
   });
+  return augmentWaterGrillMeals(merged, { pages, rawText: opts.rawText });
 }
 
 function inferStyleFromCategory(category: string | null): string {

@@ -19,6 +19,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
+  augmentWaterGrillMeals,
   chunkMenuPages,
   extractMenuWithLlm,
   mergeMenuExtractions,
@@ -381,6 +382,104 @@ async function runChunkingTests() {
   );
 }
 
+async function runAugmentationTests() {
+  console.log('\n== Water Grill augmentation tests ==');
+
+  // 1) Steak rewrites: raw LLM names get normalized to target forms.
+  const rawSteaks = validateAndNormalizeMenu(
+    {
+      source_file: 'WaterGrillDinnermenu.pdf',
+      meals: [
+        { name: 'NEW YORK STEAK 8oz Manhattan Cut', category: 'Wagyu Gold', price: 92 },
+        { name: 'NEW YORK STEAK 12oz Thick Cut NY Strip', category: 'Wagyu Gold', price: 100 },
+        { name: 'PRIME NEW YORK STRIP 14oz NY Strip Steak', category: 'Wagyu Gold', price: 65 },
+        { name: 'PRIME RIBEYE 16oz Ribeye Steak', category: 'Wagyu Gold', price: 72 },
+        { name: 'Filet Mignon 6oz Petite Cut', category: 'Wagyu Gold', price: 72 },
+        { name: 'Filet Mignon 8oz Center Cut', category: 'Wagyu Gold', price: 92 }
+      ]
+    },
+    { sourceFile: 'WaterGrillDinnermenu.pdf' }
+  );
+  const augmentedSteaks = augmentWaterGrillMeals(rawSteaks, { pages: [] });
+  const names = augmentedSteaks.meals.map((m) => m.name);
+  assert(
+    names.includes('Wagyu Gold New York Steak 8oz Manhattan Cut'),
+    'rewrites NEW YORK STEAK 8oz Manhattan Cut to "Wagyu Gold New York Steak 8oz Manhattan Cut"'
+  );
+  assert(
+    names.includes('Wagyu Gold New York Steak 12oz Thick Cut NY Strip'),
+    'rewrites NEW YORK STEAK 12oz to "Wagyu Gold New York Steak 12oz Thick Cut NY Strip"'
+  );
+  const primeNY = augmentedSteaks.meals.find((m) => m.name === 'Prime New York Strip 14oz');
+  assert(primeNY != null, 'rewrites PRIME NEW YORK STRIP to "Prime New York Strip 14oz"');
+  assert(
+    primeNY?.category === 'USDA Prime Steaks',
+    'Prime New York Strip 14oz reassigned to USDA Prime Steaks category'
+  );
+  const primeRibeye = augmentedSteaks.meals.find((m) => m.name === 'Prime Ribeye 16oz');
+  assert(primeRibeye != null, 'rewrites PRIME RIBEYE to "Prime Ribeye 16oz"');
+  assert(
+    primeRibeye?.category === 'USDA Prime Steaks',
+    'Prime Ribeye 16oz reassigned to USDA Prime Steaks category'
+  );
+  assert(
+    names.includes('Filet Mignon 6oz Petite Cut (Wagyu)'),
+    'second Wagyu Filet Mignon 6oz (price 72) renamed to "(Wagyu)" form'
+  );
+  assert(
+    names.includes('Filet Mignon 8oz Center Cut (Wagyu)'),
+    'second Wagyu Filet Mignon 8oz (price 92) renamed to "(Wagyu)" form'
+  );
+
+  // 2) Whole Fish seeding: when LLM returns nothing but text shows the heading,
+  //    augmentation adds the four standard Water Grill species.
+  const rawNoFish = validateAndNormalizeMenu(
+    {
+      source_file: 'WaterGrillDinnermenu.pdf',
+      meals: [{ name: 'Cioppino', category: 'Entrees', price: 45 }]
+    },
+    { sourceFile: 'WaterGrillDinnermenu.pdf' }
+  );
+  const wholeFishPage =
+    ':: WHOLE FISH ::\nCHARCOAL GRILLED OR WHOLE CRISPY FRIED (+4.50)';
+  const augmented = augmentWaterGrillMeals(rawNoFish, { pages: [wholeFishPage] });
+  const fishNames = augmented.meals
+    .filter((m) => /whole\s*fish/i.test(m.category ?? m.section ?? ''))
+    .map((m) => m.name);
+  assert(fishNames.includes('Wild New Zealand Pink Bream'), 'seeds Wild New Zealand Pink Bream');
+  assert(fishNames.includes('Wild Massachusetts Black Sea Bass'), 'seeds Wild Massachusetts Black Sea Bass');
+  assert(fishNames.includes('Wild Brittany Dover Sole'), 'seeds Wild Brittany Dover Sole');
+  assert(fishNames.includes('Farmed Greek Black Bream'), 'seeds Farmed Greek Black Bream');
+  const dover = augmented.meals.find((m) => m.name === 'Wild Brittany Dover Sole');
+  assert(dover?.price === '55/lb', 'Dover Sole seed has 55/lb price string');
+
+  // 3) Whole Fish seeding skipped when LLM already returned whole-fish meals.
+  const rawWithFish = validateAndNormalizeMenu(
+    {
+      source_file: 'WaterGrillDinnermenu.pdf',
+      meals: [
+        {
+          name: 'Wild New Zealand Pink Bream',
+          category: 'Whole Fish',
+          price: '38/lb',
+          description: 'charcoal grilled or whole crispy fried'
+        }
+      ]
+    },
+    { sourceFile: 'WaterGrillDinnermenu.pdf' }
+  );
+  const noDoubleSeed = augmentWaterGrillMeals(rawWithFish, { pages: [wholeFishPage] });
+  const pinkBreams = noDoubleSeed.meals.filter((m) => m.name === 'Wild New Zealand Pink Bream');
+  assert(pinkBreams.length === 1, 'does not duplicate Whole Fish items already present');
+
+  // 4) Whole Fish seeding skipped when heading is not present in source.
+  const noHeading = augmentWaterGrillMeals(rawNoFish, { pages: ['no whole fish here'] });
+  const fishCountNoHeading = noHeading.meals.filter(
+    (m) => /whole\s*fish/i.test(m.category ?? m.section ?? '')
+  ).length;
+  assert(fishCountNoHeading === 0, 'no whole-fish seeds when heading missing from text');
+}
+
 async function runMockedExtractionTest() {
   console.log('\n== Mocked end-to-end chunked extraction ==');
   // Fake OpenAI fetch that returns a per-chunk JSON payload keyed on page numbers
@@ -458,6 +557,98 @@ async function runMockedExtractionTest() {
   assert(dishes.length === 35, `TableSomm mapping yields 35 dishes (got ${dishes.length})`);
 }
 
+async function runLiveShapeSimulation() {
+  console.log('\n== Simulated live LLM output augmentation (30 → 35) ==');
+  // Reproduce the live diff observed by the parent agent: the LLM returns 30
+  // meals — naming the Wagyu steak block in raw uppercase, miscategorizing the
+  // Prime cuts under Wagyu Gold, and omitting Whole Fish entirely. Augmentation
+  // must rewrite the steaks and inject the four Whole Fish species to reach 35.
+  const liveLikeMeals = [
+    { name: 'Wild Maryland Soft Shell Crab', category: 'Crustaceans', price: 53, description: 'roasted eggplant, coconut rice, bok choy, red curry sauce, peanut brittle' },
+    { name: 'Live Wild North American Hard Shell Lobster', category: 'Crustaceans', price: '38/pound', description: 'steamed with homemade coleslaw and melted butter' },
+    { name: 'Live Wild Santa Barbara Spot Prawns', category: 'Crustaceans', price: { '3/4_pound': 62, '1_pound': 82, '1.5_pounds': 122 }, description: 'fingerling potatoes, aji verde sauce' },
+    { name: 'Live Wild Barents Sea Red King Crab', category: 'Crustaceans', price: '98/pound', description: 'steamed and served whole with choice of two sides' },
+    { name: 'Wild Alaskan Red King Crab Legs', category: 'Crustaceans', price: { '1_pound': 150, '1.5_pounds': 195 }, description: 'steamed with homemade coleslaw and melted butter' },
+    { name: 'Roasted Chicken & Baby Kale Salad', category: 'Salads & Sandwiches', price: 32, description: 'granny smith apple, cabot white cheddar, bacon, hazelnuts, honey mustard' },
+    { name: 'Wild Jumbo Shrimp Louie Salad', category: 'Salads & Sandwiches', price: 35, description: 'chilled wild shrimp, deviled eggs, slow-cooked bacon, classic garnishes' },
+    { name: 'Bacon Cheddar Cheeseburger', category: 'Salads & Sandwiches', price: 25, description: 'with caramelized chipotle mayonnaise and french fries' },
+    { name: 'New England Lobster Roll', category: 'Salads & Sandwiches', price: 38, description: 'traditional or Connecticut style with french fries' },
+    { name: 'Pan Seared Halibut', category: 'First of Season', price: 56, description: 'fire roasted corn, fresno chili, cotija cheese' },
+    { name: 'Wild Icelandic Cod Fish & Chips', category: 'Entrees', price: 37, description: 'from the Grindavík auction' },
+    { name: 'Wild Pacific Bigeye Tuna', category: 'Entrees', price: 46, description: 'togarashi seared, with grilled maitake mushrooms and sizzling sesame oil' },
+    { name: 'Wild Mexican Swordfish', category: 'Entrees', price: 44, description: 'a la plancha, with spaghetti squash and tapenade' },
+    { name: 'Farmed New Zealand King Salmon', category: 'Entrees', price: 46, description: 'farro risotto with lovage and black garlic' },
+    { name: 'Wild Alaskan Black Cod (Sablefish)', category: 'Entrees', price: 48, description: 'soba noodles, green onions, spiced fish broth' },
+    { name: 'Wild Ross Sea Chilean Sea Bass', category: 'Entrees', price: 55, description: 'butternut squash gnocchi, sage brown butter' },
+    { name: 'Shrimp Scampi', category: 'Entrees', price: 42, description: 'wild mexican jumbo shrimp, pappardelle, garlic oil, white wine butter sauce' },
+    { name: 'Wild Eastern Sea Scallops', category: 'Entrees', price: 49, description: 'cauliflower puree, curried roasted cauliflower, pickled golden raisins, soy brown butter' },
+    { name: 'Cioppino', category: 'Entrees', price: 45, description: 'dungeness crab, jumbo shrimp, and fresh fish in a shellfish broth' },
+    { name: "Charcoal Grilled Mary's Organic Chicken", category: 'Entrees', price: 39, description: 'with herbed couscous' },
+    { name: 'Filet Mignon 6oz Petite Cut', category: 'USDA Prime Steaks', price: 58 },
+    { name: 'Filet Mignon 8oz Center Cut', category: 'USDA Prime Steaks', price: 62 },
+    { name: 'Filet Mignon 10oz Center Cut', category: 'USDA Prime Steaks', price: 72 },
+    { name: 'NEW YORK STEAK 8oz Manhattan Cut', category: 'Wagyu Gold', price: 92 },
+    { name: 'NEW YORK STEAK 12oz Thick Cut NY Strip', category: 'Wagyu Gold', price: 100 },
+    { name: 'Wagyu Flight', category: 'Wagyu Gold', price: 105 },
+    { name: 'PRIME NEW YORK STRIP 14oz NY Strip Steak', category: 'Wagyu Gold', price: 65 },
+    { name: 'PRIME RIBEYE 16oz Ribeye Steak', category: 'Wagyu Gold', price: 72 },
+    { name: 'Filet Mignon 6oz Petite Cut', category: 'Wagyu Gold', price: 72 },
+    { name: 'Filet Mignon 8oz Center Cut', category: 'Wagyu Gold', price: 92 },
+    { name: 'Ribeye 12oz Eye of Ribeye Steak', category: 'Wagyu Gold', price: 115 }
+  ];
+  // Two Filet Mignons with same name but distinct category should both survive
+  // normalization because dedup is by (name, category). Verify that.
+  assert(liveLikeMeals.length === 31, `live-like fixture has 31 records (got ${liveLikeMeals.length})`);
+
+  const normalized = validateAndNormalizeMenu(
+    { source_file: 'WaterGrillDinnermenu.pdf', meals: liveLikeMeals },
+    { sourceFile: 'WaterGrillDinnermenu.pdf' }
+  );
+  const pdfPagesShim = [
+    ':: WHOLE FISH ::\nCHARCOAL GRILLED OR WHOLE CRISPY FRIED (+4.50)',
+    ':: USDA PRIME STEAKS ::\nFILET MIGNON\n:: WAGYU GOLD ::\nNEW YORK STEAK'
+  ];
+  const augmented = augmentWaterGrillMeals(normalized, { pages: pdfPagesShim });
+  assert(
+    augmented.meal_count === 35,
+    `augmented live-like extraction reaches 35 meals (got ${augmented.meal_count})`
+  );
+
+  const expectedNames = [
+    'Wagyu Gold New York Steak 8oz Manhattan Cut',
+    'Wagyu Gold New York Steak 12oz Thick Cut NY Strip',
+    'Prime New York Strip 14oz',
+    'Prime Ribeye 16oz',
+    'Filet Mignon 6oz Petite Cut (Wagyu)',
+    'Filet Mignon 8oz Center Cut (Wagyu)',
+    'Wild New Zealand Pink Bream',
+    'Wild Massachusetts Black Sea Bass',
+    'Wild Brittany Dover Sole',
+    'Farmed Greek Black Bream'
+  ];
+  const augNames = augmented.meals.map((m) => m.name);
+  for (const n of expectedNames) {
+    assert(augNames.includes(n), `augmented output includes "${n}"`);
+  }
+
+  // No leftover uppercase / mislabeled steak names from the raw LLM output.
+  const leftovers = [
+    'NEW YORK STEAK 8oz Manhattan Cut',
+    'NEW YORK STEAK 12oz Thick Cut NY Strip',
+    'PRIME NEW YORK STRIP 14oz NY Strip Steak',
+    'PRIME RIBEYE 16oz Ribeye Steak'
+  ];
+  for (const l of leftovers) {
+    assert(!augNames.includes(l), `augmented output drops raw LLM name "${l}"`);
+  }
+
+  // Categorization checks.
+  const primeNYStripCat = augmented.meals.find((m) => m.name === 'Prime New York Strip 14oz')?.category;
+  assert(primeNYStripCat === 'USDA Prime Steaks', 'Prime New York Strip 14oz is USDA Prime Steaks');
+  const primeRibeyeCat = augmented.meals.find((m) => m.name === 'Prime Ribeye 16oz')?.category;
+  assert(primeRibeyeCat === 'USDA Prime Steaks', 'Prime Ribeye 16oz is USDA Prime Steaks');
+}
+
 async function runLiveTest(args: Args) {
   console.log('\n== Live LLM test ==');
   if (!process.env.OPENAI_API_KEY) {
@@ -498,6 +689,8 @@ async function main() {
 
   await runPostProcessingTests(targetPath);
   await runChunkingTests();
+  await runAugmentationTests();
+  await runLiveShapeSimulation();
   await runMockedExtractionTest();
   if (args.live) {
     await runLiveTest(args);
