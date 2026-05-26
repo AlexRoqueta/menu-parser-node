@@ -9,6 +9,7 @@ import {
   type VisionImage
 } from './llmClient.js';
 import { imageBufferToDataUrl } from './pdfRender.js';
+import { tileTallImage, type TileImageOptions } from './imageTiler.js';
 
 export type WineLlmPrices = {
   glass?: number;
@@ -799,6 +800,69 @@ export async function extractWinesWithVision(
     }
   }
   return part;
+}
+
+/**
+ * Convenience wrapper for the `/parse-wine-list` direct image-upload path.
+ *
+ * Mirrors {@link extractMenuFromImageUpload}: if the uploaded image is
+ * unusually tall (a stitched multi-page wine list) it's sliced into
+ * overlapping vertical tiles which are extracted in parallel and merged.
+ * Normal-aspect images and missing ImageMagick gracefully fall back to a
+ * single-image call so behavior matches the previous implementation.
+ */
+export type ExtractWinesFromImageUploadOptions = SharedLlmCallOptions & {
+  sourceFile: string;
+  extractionScope?: string;
+  imageBuffer: Buffer;
+  detail?: 'low' | 'high' | 'auto';
+  concurrency?: number;
+  tileOptions?: TileImageOptions;
+  disableTiling?: boolean;
+  callVision?: ExtractWinesWithVisionOptions['callVision'];
+};
+
+export async function extractWinesFromImageUpload(
+  opts: ExtractWinesFromImageUploadOptions
+): Promise<WineLlmExtraction & { tileCount: number }> {
+  const singleCall = async (
+    images: Buffer[],
+    pageNumbers?: number[]
+  ): Promise<WineLlmExtraction> =>
+    extractWinesWithVision({
+      sourceFile: opts.sourceFile,
+      extractionScope: opts.extractionScope,
+      images,
+      pageNumbers,
+      detail: opts.detail,
+      apiKey: opts.apiKey,
+      model: opts.model,
+      baseUrl: opts.baseUrl,
+      fetchImpl: opts.fetchImpl,
+      callVision: opts.callVision
+    });
+
+  if (opts.disableTiling) {
+    const e = await singleCall([opts.imageBuffer]);
+    return { ...e, tileCount: 1 };
+  }
+
+  const tiled = await tileTallImage(opts.imageBuffer, opts.tileOptions);
+  if (!tiled || tiled.tiles.length < 2) {
+    const e = await singleCall([opts.imageBuffer]);
+    return { ...e, tileCount: 1 };
+  }
+
+  const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CHUNK_CONCURRENCY);
+  const tilePageNumbers = tiled.tiles.map((_, i) => i + 1);
+  const partials = await runWithConcurrency(tiled.tiles, concurrency, async (buf, i) =>
+    singleCall([buf], [tilePageNumbers[i]])
+  );
+  const merged = mergeExtractions(partials, {
+    sourceFile: opts.sourceFile,
+    extractionScope: opts.extractionScope
+  });
+  return { ...merged, tileCount: tiled.tiles.length };
 }
 
 export {

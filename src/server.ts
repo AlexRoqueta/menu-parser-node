@@ -17,6 +17,7 @@ import {
   extractPdfPages,
   extractWinesWithLlm,
   extractWinesWithVision,
+  extractWinesFromImageUpload,
   toTableSommWines,
   WINE_LLM_PARSER_VERSION,
   WINE_LLM_PARSER_VERSION_VISION
@@ -24,6 +25,7 @@ import {
 import {
   extractMenuWithLlm,
   extractMenuWithVision,
+  extractMenuFromImageUpload,
   toTableSommDishes as toLlmDishes,
   MENU_LLM_PARSER_VERSION,
   MENU_LLM_PARSER_VERSION_VISION
@@ -154,9 +156,13 @@ app.post('/parse-menu', upload.single('file'), async (req, res) => {
       // simply sent an empty `rawText` to the text LLM, which is wasteful.
       if (isImage) {
         try {
-          const extraction = await extractMenuWithVision({
+          // Tall stitched menu images (e.g. one JPG containing every printed
+          // page of a dinner menu) under-extract when sent as a single image.
+          // `extractMenuFromImageUpload` slices unusually tall images into
+          // overlapping page-like tiles, runs vision per tile, and merges.
+          const extraction = await extractMenuFromImageUpload({
             sourceFile: file.originalname,
-            images: [file.buffer]
+            imageBuffer: file.buffer
           });
           const dishes = toLlmDishes(extraction);
           return res.json({
@@ -167,7 +173,8 @@ app.post('/parse-menu', upload.single('file'), async (req, res) => {
             count: dishes.length,
             parserVersion: MENU_LLM_PARSER_VERSION_VISION,
             model: process.env.MENU_PARSER_MODEL ?? 'gpt-4o-mini',
-            acceptedInputType: 'image'
+            acceptedInputType: 'image',
+            tileCount: extraction.tileCount
           });
         } catch (llmErr) {
           const message = llmErr instanceof Error ? llmErr.message : 'LLM vision extraction failed';
@@ -308,9 +315,11 @@ app.post('/parse-wine-list', upload.single('file'), async (req, res) => {
     if (llmEnabled && !forceDeterministic) {
       if (isImage) {
         try {
-          const extraction = await extractWinesWithVision({
+          // See `extractMenuFromImageUpload` — same approach for wine lists:
+          // unusually tall images are tiled, extracted per tile, and merged.
+          const extraction = await extractWinesFromImageUpload({
             sourceFile: file.originalname,
-            images: [file.buffer]
+            imageBuffer: file.buffer
           });
           const wines = toTableSommWines(extraction);
           return res.json({
@@ -321,7 +330,8 @@ app.post('/parse-wine-list', upload.single('file'), async (req, res) => {
             count: wines.length,
             parserVersion: WINE_LLM_PARSER_VERSION_VISION,
             model: process.env.WINE_PARSER_MODEL ?? 'gpt-4o-mini',
-            acceptedInputType: 'image'
+            acceptedInputType: 'image',
+            tileCount: extraction.tileCount
           });
         } catch (llmErr) {
           const message = llmErr instanceof Error ? llmErr.message : 'LLM vision extraction failed';

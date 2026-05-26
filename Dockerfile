@@ -1,7 +1,7 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y poppler-utils \
+  && apt-get install -y poppler-utils imagemagick \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

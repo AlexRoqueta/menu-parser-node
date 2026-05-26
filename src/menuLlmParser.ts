@@ -25,6 +25,7 @@ import {
   type VisionImage
 } from './llmClient.js';
 import { imageBufferToDataUrl } from './pdfRender.js';
+import { tileTallImage, type TileImageOptions } from './imageTiler.js';
 
 export type MealPrice = number | string | Record<string, number | string> | null;
 
@@ -1073,6 +1074,79 @@ export async function extractMenuWithVision(
   // the heuristic functions stay defensive — they look for ":: WHOLE FISH ::"
   // text which the vision model is also expected to surface in dish names.
   return augmentWaterGrillMeals(normalized, {});
+}
+
+/**
+ * Convenience wrapper for the `/parse-menu` direct image-upload path.
+ *
+ * Tall stitched menu images (one JPG that contains an entire multi-page menu)
+ * cause the vision LLM to under-extract — a 1080x4452 Maggiano's menu image
+ * yields ~14 meals while the PDF version yields ~31. This helper detects that
+ * case, slices the image into overlapping page-like tiles, runs the existing
+ * vision extractor per tile (in parallel), and merges + dedupes the results.
+ *
+ * Normal-aspect images (single physical page photos) skip the tiler entirely
+ * and behave identically to {@link extractMenuWithVision} with `[buffer]`.
+ *
+ * If ImageMagick is unavailable the helper falls back to the single-image
+ * call so uploads never fail because of an optional tooling dependency.
+ */
+export type ExtractMenuFromImageUploadOptions = LlmCallOptions & {
+  sourceFile: string;
+  extractionScope?: string;
+  imageBuffer: Buffer;
+  detail?: 'low' | 'high' | 'auto';
+  /** Concurrency cap for per-tile vision calls. */
+  concurrency?: number;
+  /** Override the tiler thresholds (mostly for tests). */
+  tileOptions?: TileImageOptions;
+  /** Force the upload to be treated as a single image (skip tiling entirely). */
+  disableTiling?: boolean;
+  /** Test seam: override the underlying vision call. */
+  callVision?: ExtractMenuWithVisionOptions['callVision'];
+};
+
+export async function extractMenuFromImageUpload(
+  opts: ExtractMenuFromImageUploadOptions
+): Promise<MenuLlmExtraction & { tileCount: number }> {
+  const singleCall = async (
+    images: Buffer[],
+    pageNumbers?: number[]
+  ): Promise<MenuLlmExtraction> =>
+    extractMenuWithVision({
+      sourceFile: opts.sourceFile,
+      extractionScope: opts.extractionScope,
+      images,
+      pageNumbers,
+      detail: opts.detail,
+      apiKey: opts.apiKey,
+      model: opts.model,
+      baseUrl: opts.baseUrl,
+      fetchImpl: opts.fetchImpl,
+      callVision: opts.callVision
+    });
+
+  if (opts.disableTiling) {
+    const e = await singleCall([opts.imageBuffer]);
+    return { ...e, tileCount: 1 };
+  }
+
+  const tiled = await tileTallImage(opts.imageBuffer, opts.tileOptions);
+  if (!tiled || tiled.tiles.length < 2) {
+    const e = await singleCall([opts.imageBuffer]);
+    return { ...e, tileCount: 1 };
+  }
+
+  const concurrency = Math.max(1, opts.concurrency ?? DEFAULT_CHUNK_CONCURRENCY);
+  const tilePageNumbers = tiled.tiles.map((_, i) => i + 1);
+  const partials = await runWithConcurrency(tiled.tiles, concurrency, async (buf, i) =>
+    singleCall([buf], [tilePageNumbers[i]])
+  );
+  const merged = mergeMenuExtractions(partials, {
+    sourceFile: opts.sourceFile,
+    extractionScope: opts.extractionScope
+  });
+  return { ...merged, tileCount: tiled.tiles.length };
 }
 
 export {
