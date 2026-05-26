@@ -500,48 +500,172 @@ function isHeadingOrNoise(name: string): boolean {
 }
 
 /**
- * Build a dedup key from a wine record. Same wine, vintage, AND price set at
- * the same section should not appear twice — but the same wine that appears as
- * an offering both BTG and Bottle List (different prices/section) is two
- * distinct offerings and we keep both.
+ * Normalize a wine name for dedupe: lower-case, collapse whitespace/quotes, and
+ * strip any trailing vintage / "NV" token that the LLM may have appended. The
+ * vintage is tracked separately on the record, so keeping it in the dedupe
+ * name causes overlap-induced duplicates where one tile saw the vintage and
+ * another didn't.
  */
-function dedupKey(rec: WineLlmRecord): string {
-  const name = rec.wine.toLowerCase().replace(/[\s'"]+/g, ' ').trim();
-  const vintage = (rec.vintage ?? '').toLowerCase();
-  const section = (rec.section ?? '').toLowerCase();
-  const g = rec.prices.glass ?? '';
-  const c = rec.prices.carafe ?? '';
-  const h = rec.prices.half_bottle ?? '';
-  const b = rec.prices.bottle ?? '';
-  return `${name}|${vintage}|${section}|${g}|${c}|${h}|${b}`;
+function normalizeWineName(raw: string): string {
+  let s = (raw ?? '').toLowerCase().replace(/[\s'’"`]+/g, ' ').trim();
+  // Strip trailing 4-digit year, "NV", or "n.v." — vintage is on its own field.
+  s = s.replace(/[\s,]+(?:nv|n\.v\.|\d{4})\s*$/i, '').trim();
+  // Drop trailing punctuation noise.
+  s = s.replace(/[.,;:\-–—]+$/g, '').trim();
+  return s;
 }
 
 /**
- * Merge several extractions into one, deduping wines and unioning source_pages
- * for entries that match on (name, vintage, section, prices).
+ * Stable dedup key: normalized name + section + vintage. We intentionally do
+ * NOT include the price fingerprint because overlapping tiles / adjacent
+ * rendered pages routinely see the same wine and pick up slightly different
+ * prices for the same offering (e.g. one tile crops the bottle column).
+ * Vintage IS part of the key because the same producer's wine in two
+ * different vintages (e.g. Duckhorn 2022 vs 2024) is two distinct offerings
+ * on the bottle list. A record without a vintage is matched against records
+ * that share name+section regardless of vintage — this absorbs overlap
+ * duplicates where one tile cropped the year off without conflating two
+ * concrete vintages.
+ */
+function dedupKey(rec: WineLlmRecord): string {
+  const name = normalizeWineName(rec.wine);
+  const section = (rec.section ?? '').toLowerCase().trim();
+  const vintage = (rec.vintage ?? '').toLowerCase().trim();
+  return `${name}|${section}|${vintage}`;
+}
+
+/** Key used to absorb a vintage-less duplicate into an existing entry. */
+function dedupKeyVintageless(rec: WineLlmRecord): string {
+  const name = normalizeWineName(rec.wine);
+  const section = (rec.section ?? '').toLowerCase().trim();
+  return `${name}|${section}|`;
+}
+
+function priceSlotCount(rec: WineLlmRecord): number {
+  let n = 0;
+  if (rec.prices.glass != null) n += 1;
+  if (rec.prices.carafe != null) n += 1;
+  if (rec.prices.half_bottle != null) n += 1;
+  if (rec.prices.bottle != null) n += 1;
+  return n;
+}
+
+/** Returns true when at least one priced offering is present on the record. */
+function hasAnyPrice(rec: WineLlmRecord): boolean {
+  return priceSlotCount(rec) > 0;
+}
+
+/**
+ * Merge two records that match on (name, section). We keep the one with the
+ * most price slots populated as the base, then union pages and back-fill
+ * empty fields. Prices that are present on one record but missing on the
+ * other are copied in — this recovers e.g. a bottle price from a later tile
+ * when the earlier tile only saw the glass column.
+ */
+function mergeRecords(a: WineLlmRecord, b: WineLlmRecord): WineLlmRecord {
+  const base = priceSlotCount(a) >= priceSlotCount(b) ? a : b;
+  const other = base === a ? b : a;
+  const pages = new Set([...(base.source_pages ?? []), ...(other.source_pages ?? [])]);
+  const merged: WineLlmRecord = {
+    ...base,
+    prices: { ...base.prices },
+    source_pages: Array.from(pages).sort((x, y) => x - y)
+  };
+  if (merged.prices.glass == null && other.prices.glass != null)
+    merged.prices.glass = other.prices.glass;
+  if (merged.prices.carafe == null && other.prices.carafe != null)
+    merged.prices.carafe = other.prices.carafe;
+  if (merged.prices.half_bottle == null && other.prices.half_bottle != null)
+    merged.prices.half_bottle = other.prices.half_bottle;
+  if (merged.prices.bottle == null && other.prices.bottle != null)
+    merged.prices.bottle = other.prices.bottle;
+  if (!merged.bin && other.bin) merged.bin = other.bin;
+  if (!merged.category && other.category) merged.category = other.category;
+  if (!merged.section && other.section) merged.section = other.section;
+  if (!merged.page && other.page) merged.page = other.page;
+  if (!merged.vintage && other.vintage) merged.vintage = other.vintage;
+  return merged;
+}
+
+/**
+ * Merge several extractions into one, deduping wines on (normalized name,
+ * section) and unioning prices/pages. Records that lack any price are dropped
+ * defensively — `normalizeOneWine` already enforces this, but a merge can be
+ * called on records produced by callers that bypass that path.
  */
 export function mergeExtractions(
   parts: WineLlmExtraction[],
   opts: { sourceFile: string; extractionScope?: string }
 ): WineLlmExtraction {
   const byKey = new Map<string, WineLlmRecord>();
+  // Track every key that shares a (name, section) prefix so a vintage-less
+  // copy can be absorbed into the existing vintage'd record.
+  const keysByNameSection = new Map<string, string[]>();
+
   for (const part of parts) {
     for (const w of part.wines) {
+      if (!hasAnyPrice(w)) continue;
       const key = dedupKey(w);
-      const existing = byKey.get(key);
-      if (!existing) {
-        byKey.set(key, { ...w, source_pages: [...(w.source_pages ?? [])] });
+      const vintageless = (w.vintage ?? '').trim() === '';
+      let target = byKey.get(key);
+
+      // Vintage-less record arriving after a vintage'd record exists for the
+      // same name+section → absorb into the existing one (only when exactly
+      // one candidate exists, to avoid ambiguous matches).
+      if (!target && vintageless) {
+        const candidates = keysByNameSection.get(dedupKeyVintageless(w)) ?? [];
+        if (candidates.length === 1) {
+          target = byKey.get(candidates[0]);
+        }
+      }
+
+      if (!target) {
+        const copy: WineLlmRecord = {
+          ...w,
+          prices: { ...w.prices },
+          source_pages: [...(w.source_pages ?? [])]
+        };
+        byKey.set(key, copy);
+        const list = keysByNameSection.get(dedupKeyVintageless(w)) ?? [];
+        list.push(key);
+        keysByNameSection.set(dedupKeyVintageless(w), list);
       } else {
-        const pages = new Set([...(existing.source_pages ?? []), ...(w.source_pages ?? [])]);
-        existing.source_pages = Array.from(pages).sort((a, b) => a - b);
-        if (!existing.bin && w.bin) existing.bin = w.bin;
-        if (!existing.category && w.category) existing.category = w.category;
-        if (!existing.section && w.section) existing.section = w.section;
-        if (!existing.page && w.page) existing.page = w.page;
+        const merged = mergeRecords(target, w);
+        // Find which key target lives at and update in place.
+        for (const [k, v] of byKey) {
+          if (v === target) {
+            byKey.set(k, merged);
+            break;
+          }
+        }
       }
     }
   }
-  const wines = Array.from(byKey.values());
+
+  // Second pass: a vintage'd record may have been written before a
+  // vintage-less duplicate arrived (when the vintage-less one came first
+  // there was no key to anchor on, so it took its own slot). Collapse any
+  // remaining vintage-less entries that share name+section with exactly one
+  // vintage'd sibling.
+  const final = new Map<string, WineLlmRecord>();
+  for (const [k, v] of byKey) final.set(k, v);
+  for (const [k, v] of byKey) {
+    const vintage = (v.vintage ?? '').trim();
+    if (vintage !== '') continue;
+    const siblings: string[] = [];
+    for (const [k2, v2] of final) {
+      if (k2 === k) continue;
+      if ((v2.vintage ?? '').trim() === '') continue;
+      if (dedupKeyVintageless(v2) === dedupKeyVintageless(v)) siblings.push(k2);
+    }
+    if (siblings.length === 1) {
+      const sibling = final.get(siblings[0])!;
+      final.set(siblings[0], mergeRecords(sibling, v));
+      final.delete(k);
+    }
+  }
+
+  const wines = Array.from(final.values()).filter(hasAnyPrice);
   return {
     source_file: opts.sourceFile,
     extraction_scope: opts.extractionScope ?? DEFAULT_EXTRACTION_SCOPE,
@@ -754,18 +878,22 @@ export function buildWineVisionUserPrompt(opts: {
   ].join('\n');
 }
 
-export async function extractWinesWithVision(
+/**
+ * Single vision call for a batch of images. Used internally; prefer
+ * {@link extractWinesWithVision} which runs one call per image and merges so
+ * the PDF page path and the tall-image tile path share identical behaviour.
+ */
+async function callVisionOnce(
+  images: Buffer[],
+  pageNumbers: number[] | undefined,
   opts: ExtractWinesWithVisionOptions
 ): Promise<WineLlmExtraction> {
-  if (!opts.images || opts.images.length === 0) {
-    throw new Error('extractWinesWithVision requires at least one image buffer');
-  }
   const userText = buildWineVisionUserPrompt({
     sourceFile: opts.sourceFile,
-    pageNumbers: opts.pageNumbers,
-    imageCount: opts.images.length
+    pageNumbers,
+    imageCount: images.length
   });
-  const visionImages: VisionImage[] = opts.images.map((buf) => ({
+  const visionImages: VisionImage[] = images.map((buf) => ({
     url: imageBufferToDataUrl(buf),
     detail: opts.detail ?? 'high'
   }));
@@ -788,8 +916,8 @@ export async function extractWinesWithVision(
   });
   // Backfill source_pages / page from the provided page numbers when the
   // model didn't report them.
-  if (opts.pageNumbers && opts.pageNumbers.length === opts.images.length) {
-    const all = [...opts.pageNumbers].sort((a, b) => a - b);
+  if (pageNumbers && pageNumbers.length === images.length) {
+    const all = [...pageNumbers].sort((a, b) => a - b);
     for (const w of part.wines) {
       if (!w.source_pages || w.source_pages.length === 0) {
         w.source_pages = [...all];
@@ -800,6 +928,42 @@ export async function extractWinesWithVision(
     }
   }
   return part;
+}
+
+/**
+ * Run the vision LLM over one or more images and return a merged extraction.
+ *
+ * Behaviour:
+ *  - One image: a single vision call (back-compat with prior behaviour).
+ *  - Multiple images: one vision call per image, executed with
+ *    {@link DEFAULT_CHUNK_CONCURRENCY} concurrency, then merged via
+ *    {@link mergeExtractions}. This matches the tall-image tiling path so the
+ *    rendered-PDF-page route and the direct tall-image route share the same
+ *    extract-then-merge logic.
+ */
+export async function extractWinesWithVision(
+  opts: ExtractWinesWithVisionOptions
+): Promise<WineLlmExtraction> {
+  if (!opts.images || opts.images.length === 0) {
+    throw new Error('extractWinesWithVision requires at least one image buffer');
+  }
+
+  if (opts.images.length === 1) {
+    return callVisionOnce(opts.images, opts.pageNumbers, opts);
+  }
+
+  const concurrency = Math.max(1, DEFAULT_CHUNK_CONCURRENCY);
+  const pageNums =
+    opts.pageNumbers && opts.pageNumbers.length === opts.images.length
+      ? opts.pageNumbers
+      : opts.images.map((_, i) => i + 1);
+  const partials = await runWithConcurrency(opts.images, concurrency, async (buf, i) =>
+    callVisionOnce([buf], [pageNums[i]], opts)
+  );
+  return mergeExtractions(partials, {
+    sourceFile: opts.sourceFile,
+    extractionScope: opts.extractionScope
+  });
 }
 
 /**
