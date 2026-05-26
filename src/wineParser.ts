@@ -203,6 +203,15 @@ const PURE_DIGIT_LINE_RE = /^[\d\s.,\-#]+$/;
 const BIN_PREFIX_RE = /^(?:bin|sku|lot|cellar|item)\s*[#:]?\s*\d+\s*$/i;
 const GLUED_VINTAGE_BIN_RE = /\b(19[5-9]\d|20[0-4]\d)(\d{1,4})\b/;
 
+// OCR/PDF text extraction commonly glues a leading 3-4 digit bin/SKU directly to
+// the producer name with no whitespace (e.g. "200La Caña Albariño...",
+// "1006Nicolas Feuillatte..."). Split when the digits are followed by a capital
+// letter. The leading digits must look like a plausible bin, not a year.
+const LEADING_BIN_GLUE_RE = /^(\d{3,4})([A-ZÀ-Þ])/;
+
+// NV / MV / N.V. glued directly to a glass price (e.g. "NV13.5", "NV27.5", "MV99").
+const NV_PRICE_GLUE_RE = /\b(NV|MV|N\.V\.)(\d{1,4}(?:\.\d{1,2})?)\b/g;
+
 // Decorative section heading: anything wrapped/prefixed/suffixed by colon
 // pairs, bullets, equals, tildes, ornament punctuation (e.g. `:: SPARKLING ::`,
 // `=== RED WINE ===`, `* CHARDONNAY *`). The wrapping marks the whole line as
@@ -297,6 +306,65 @@ function isVarietalOrCategoryOnlyHeading(line: string): boolean {
     return false;
   });
   return allVarietal;
+}
+
+// Tests for explicit decorative section markers like `:: SPARKLING ::`,
+// `:: COCKTAILS ::`, `:: BARTENDER'S SPECIAL ::`. Used by the section-mode
+// gate to decide whether we are currently inside a wine section or a
+// non-wine section (cocktails / spirits / beer / etc.).
+const DECORATIVE_MARKER_RE = /::|=={2,}|~{2,}|\*{2,}/;
+
+function extractDecorativeHeadingText(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  if (!DECORATIVE_MARKER_RE.test(trimmed)) return null;
+  if (!DECORATIVE_WRAPPED_HEADING_RE.test(trimmed) &&
+      !DECORATIVE_PREFIX_HEADING_RE.test(trimmed) &&
+      !DECORATIVE_SUFFIX_HEADING_RE.test(trimmed)) {
+    return null;
+  }
+  // Reject lines that are actual wine rows (they have vintage / NV / price).
+  if (VINTAGE_RE.test(trimmed) || NV_RE.test(trimmed) || /\$\d/.test(trimmed)) return null;
+  const inner = stripDecorationAndContinuation(trimmed);
+  return inner || null;
+}
+
+// Patterns indicating a non-wine section heading. Matched against the inner
+// text of a `:: ... ::` marker. Covers cocktails, spirit-free, beer/draughts,
+// and the spirits portion of the list (whiskey/whisky/bourbon/rye/scotch/
+// brandy/tequila/mezcal/rum/gin/vodka/cognac/spirits).
+const NON_WINE_SECTION_RE =
+  /\b(spirit\s*free|spirit[\s-]?free|cocktails?|bartender'?s\s+special|draughts?|drafts?|on\s+tap|beers?|cans?\s+(?:and|&)\s+bottles?|cans?|bottles?\s+(?:and|&)\s+cans?|hard\s+seltzers?|seltzers?|ciders?|spirits?|whiskeys?|whiskys?|bourbons?|ryes?|scotch(?:es)?|single\s+malt|blended\s+scotch|japanese\s+whisk(?:e)?y|brand(?:y|ies)|cognacs?|tequilas?|mezcals?|rums?|gins?|vodkas?|aperitifs?|digestifs?|liqueurs?|amari|amaro)\b/i;
+
+// Patterns indicating a wine section heading. Covers explicit wine words and
+// well-known wine categories / varietals / regions used as headings on this
+// kind of menu.
+const WINE_SECTION_RE =
+  /\b(wines?\s+by\s+the\s+(?:glass|bottle)|wines?|sparkling|champagne|ros[ée]|whites?|reds?|dessert\s+wines?|fortified|sake|cabernet|merlot|malbec|pinot|chardonnay|sauvignon|riesling|syrah|shiraz|rh[ôo]ne|bordeaux|burgundy|bourgogne|italy|spain|portugal|france|germany|austria|argentina|chile|new\s+zealand|orange|adventure\s+in\s+(?:white|red)\s+wine|bold\s+reds)\b/i;
+
+type SectionMode = 'wine' | 'non-wine' | 'unknown';
+
+function classifyDecorativeSectionMode(inner: string): SectionMode {
+  const cleaned = inner.replace(/[(].*[)]/g, '').trim();
+  if (NON_WINE_SECTION_RE.test(cleaned)) {
+    // Wine words can appear inside non-wine headings rarely, but the
+    // non-wine pattern is more specific — prefer non-wine when both match.
+    return 'non-wine';
+  }
+  if (WINE_SECTION_RE.test(cleaned)) return 'wine';
+  return 'unknown';
+}
+
+// Pre-line normalization: strip leading bin/SKU glued to producer name and
+// un-glue NV<price> tokens (e.g. "NV13.5" → "NV 13.5"). Both are common
+// OCR/PDF text-extraction artifacts. Always inserts whitespace so the
+// per-line bin extractor in buildWineEntry decides later whether the leading
+// run is a true bin or an actual vintage.
+function preprocessWineLine(line: string): string {
+  let s = line;
+  s = s.replace(NV_PRICE_GLUE_RE, (_m, marker, price) => `${marker} ${price}`);
+  s = s.replace(LEADING_BIN_GLUE_RE, '$1 $2');
+  return s;
 }
 
 function isDecorativeSectionHeading(line: string): boolean {
@@ -600,6 +668,43 @@ function isVintageToken(token: string): boolean {
 }
 
 function splitGluedVintageBin(line: string): { line: string; bin?: string } {
+  // Common Water-Grill-style OCR pattern is vintage glued to one OR two
+  // trailing prices, with the first price optionally `\d+\.5` (half-dollar
+  // glass price) and the second a whole-dollar bottle/carafe price. Try the
+  // multi-price triple split first.
+  const triple = line.match(
+    /\b(19[5-9]\d|20[0-4]\d)(\d{1,3})\.(5)(\d{1,4})\b/
+  );
+  if (triple) {
+    const year = parseInt(triple[1], 10);
+    if (year >= 1950 && year <= 2049) {
+      // <year><intGlass>.5<intCarafe> → "<year> <intGlass>.5 <intCarafe>"
+      const replaced = line.replace(
+        /\b(19[5-9]\d|20[0-4]\d)(\d{1,3})\.(5)(\d{1,4})\b/,
+        '$1 $2.$3 $4'
+      );
+      return { line: replaced };
+    }
+  }
+  // Vintage glued to two whole-dollar prices (e.g. "20241835" → "2024 18 35").
+  const doubleWhole = line.match(/\b(19[5-9]\d|20[0-4]\d)(\d{2})(\d{2})\b/);
+  if (doubleWhole) {
+    const year = parseInt(doubleWhole[1], 10);
+    if (year >= 1950 && year <= 2049) {
+      const a = parseInt(doubleWhole[2], 10);
+      const b = parseInt(doubleWhole[3], 10);
+      // Only split as two glass/carafe prices when the second is larger (carafe
+      // > glass) and both look like sensible by-the-glass numbers.
+      if (a > 0 && b > 0 && a <= 99 && b <= 99 && a < b) {
+        const replaced = line.replace(
+          /\b(19[5-9]\d|20[0-4]\d)(\d{2})(\d{2})\b/,
+          '$1 $2 $3'
+        );
+        return { line: replaced };
+      }
+    }
+  }
+  // Fall back to the simple year + single-tail split.
   const m = line.match(GLUED_VINTAGE_BIN_RE);
   if (!m) return { line };
   const year = parseInt(m[1], 10);
@@ -607,7 +712,11 @@ function splitGluedVintageBin(line: string): { line: string; bin?: string } {
   const tail = m[2];
   if (!/^\d{1,4}$/.test(tail)) return { line };
   const replaced = line.replace(GLUED_VINTAGE_BIN_RE, `$1 $2`);
-  return { line: replaced, bin: tail };
+  // Only treat the glued tail as a bin candidate when it's at least 3 digits.
+  // Shorter tails (1-2 digits, including fractional prices like ".5") almost
+  // always represent a glass / bottle price, not a cellar bin.
+  const isLikelyBin = /^\d{3,4}$/.test(tail);
+  return isLikelyBin ? { line: replaced, bin: tail } : { line: replaced };
 }
 
 function extractTrailingBin(line: string): { name: string; bin?: string } {
@@ -615,12 +724,49 @@ function extractTrailingBin(line: string): { name: string; bin?: string } {
   if (tokens.length === 0) return { name: line };
   const last = tokens[tokens.length - 1];
   if (isVintageToken(last)) return { name: line };
-  if (/^\$?\d{1,4}(?:\.\d{2})?$/.test(last)) return { name: line };
+  if (/^\$?\d{1,4}(?:\.\d{1,2})?$/.test(last)) return { name: line };
   if (/^\d{3,7}$/.test(last)) {
     tokens.pop();
     return { name: tokens.join(' ').trim(), bin: last };
   }
   return { name: line };
+}
+
+// Strip a leading 3-4 digit bin/SKU token (e.g. "200 La Caña Albariño..." →
+// "La Caña Albariño..."). The preprocessWineLine already unglues "200La Caña"
+// → "200 La Caña" so we always see a whitespace-separated leading token here.
+// Wine-list bins are sometimes 4 digits and may coincide with a year (e.g.
+// "2000"). A leading 4-digit number is interpreted as a bin (not a vintage)
+// when the same line also has a different 4-digit vintage somewhere else, or
+// when the next token is clearly a producer (capitalized letter / quote).
+function extractLeadingBin(line: string): { name: string; bin?: string } {
+  const tokens = line.split(/\s+/);
+  if (tokens.length < 2) return { name: line };
+  const first = tokens[0];
+  if (!/^\d{3,4}$/.test(first)) return { name: line };
+  // Next token must look name-like (start with a letter or opening quote).
+  if (!/^[A-Za-zÀ-ÿ'’"`]/.test(tokens[1])) return { name: line };
+  const n = parseInt(first, 10);
+  const isPossibleYear = first.length === 4 && n >= 1900 && n <= 2049;
+  if (isPossibleYear) {
+    // Treat as bin if another distinct 4-digit vintage exists later on the
+    // line (real wine bottle rows always include the vintage with the price).
+    const rest = tokens.slice(1).join(' ');
+    let foundOtherYear = false;
+    const yearRe = /\b(19[5-9]\d|20[0-4]\d)\b/g;
+    let mm: RegExpExecArray | null;
+    while ((mm = yearRe.exec(rest)) !== null) {
+      if (mm[1] !== first) {
+        foundOtherYear = true;
+        break;
+      }
+    }
+    if (!foundOtherYear && !NV_RE.test(rest)) {
+      // Looks like a real leading vintage with no other year token. Keep it.
+      return { name: line };
+    }
+  }
+  return { name: tokens.slice(1).join(' ').trim(), bin: first };
 }
 
 function extractTrailingPrices(line: string): { name: string; prices: number[] } {
@@ -629,7 +775,10 @@ function extractTrailingPrices(line: string): { name: string; prices: number[] }
   while (tokens.length > 0) {
     const last = tokens[tokens.length - 1];
     if (isVintageToken(last)) break;
-    const m = last.match(/^\$?(\d{1,4}(?:\.\d{2})?)$/);
+    // Accept whole-dollar prices and half-dollar prices ("13.5") as well as
+    // standard two-decimal prices ("13.50"). The half-dollar form is common on
+    // wine-list glass prices.
+    const m = last.match(/^\$?(\d{1,4}(?:\.\d{1,2})?)$/);
     if (m) {
       const n = Number(m[1]);
       if (Number.isFinite(n) && n > 0 && n < 100000) {
@@ -898,7 +1047,21 @@ function splitProducerName(text: string): { producer?: string; name: string } {
   const cleanedText = text.replace(/\s{2,}/g, ' ').trim();
   const commaParts = cleanedText.split(/\s*,\s*/);
   if (commaParts.length >= 2) {
-    const producer = commaParts[0].trim();
+    // Glass-list style "<Varietal>, <Producer>, <Region>, <Country>": the
+    // leading token is a bare varietal name (no other identity tokens). In
+    // that case, treat the second token as the producer/name and the rest
+    // as geography. The varietal will still be detected from the original
+    // line later via detectVarietal.
+    const first = commaParts[0].trim();
+    if (commaParts.length >= 2 && isVarietalOrCategoryOnlyHeading(first)) {
+      const producer = commaParts[1].trim();
+      const rest = commaParts.slice(2).join(', ').trim();
+      if (producer && producer.length <= 80) {
+        if (rest) return { producer, name: rest };
+        return { name: producer };
+      }
+    }
+    const producer = first;
     const rest = commaParts.slice(1).join(', ').trim();
     if (producer && rest && producer.length <= 60) {
       return { producer, name: rest };
@@ -919,9 +1082,15 @@ function buildWineEntry(
 ): WineEntry | null {
   let working = rawLine.trim();
 
+  // Strip leading bin/SKU first (e.g. "200 La Caña Albariño..." → "La Caña
+  // Albariño..."). The preprocess pass already unglued any "200La" to "200 La".
+  const leading = extractLeadingBin(working);
+  working = leading.name;
+  let bin = leading.bin;
+
   const deglued = splitGluedVintageBin(working);
   working = deglued.line;
-  let bin = deglued.bin;
+  if (!bin && deglued.bin) bin = deglued.bin;
 
   const binStripped = extractTrailingBin(working);
   if (binStripped.bin) {
@@ -1021,8 +1190,31 @@ function buildWineEntry(
   return entry;
 }
 
+// Wine-menu-specific pre-extraction normalization. Reverses one wrong
+// behavior of the general menuParser.normalizeLines pipeline for wine lists:
+// the GLUED_PRICES regex interprets "15.53" (in "202315.530") as a literal
+// `$15.53` price and inserts a space after it, splitting the half-dollar
+// glass price from its carafe price. For wine lists, the half-dollar form
+// (`15.5`) is the glass price and the trailing digits are the carafe price.
+// We pre-fix this glued vintage+half-price+carafe shape so the rest of the
+// pipeline sees a clean "year glass.5 carafe" triple.
+function preprocessRawWineText(text: string): string {
+  return text
+    .replace(/\b(19[5-9]\d|20[0-4]\d)(\d{1,3})\.5(\d{1,4})\b/g, '$1 $2.5 $3')
+    .replace(/\b(19[5-9]\d|20[0-4]\d)(\d{2})(\d{2})\b/g, (m, y, a, b) => {
+      const ai = parseInt(a, 10);
+      const bi = parseInt(b, 10);
+      if (ai > 0 && bi > 0 && ai <= 99 && bi <= 99 && ai < bi) {
+        return `${y} ${a} ${b}`;
+      }
+      return m;
+    })
+    .replace(/\b(19[5-9]\d|20[0-4]\d)(\d{1,3})\b/g, '$1 $2')
+    .replace(/\b(NV|MV|N\.V\.)(\d{1,4}(?:\.\d{1,2})?)\b/g, '$1 $2');
+}
+
 export function parseWineText(text: string, sourceFile: string): ParsedWineList {
-  const lines = normalizeLines(text);
+  const lines = normalizeLines(preprocessRawWineText(text));
   const sections: ParsedWineSection[] = [];
   let current: ParsedWineSection = {
     section: 'WINE LIST',
@@ -1030,6 +1222,11 @@ export function parseWineText(text: string, sourceFile: string): ParsedWineList 
     items: []
   };
   let lastEntry: WineEntry | null = null;
+  // Section-mode gate. Default 'unknown' (permissive: pre-wine context such as
+  // a wine-only menu without explicit headings still parses). Once a decorative
+  // `:: ... ::` heading is classified as 'wine' or 'non-wine', we enter that
+  // mode and only flip back when another classified heading appears.
+  let sectionMode: SectionMode = 'unknown';
 
   function flush() {
     if (current.items.length > 0) {
@@ -1044,9 +1241,33 @@ export function parseWineText(text: string, sourceFile: string): ParsedWineList 
     }
   }
 
-  for (const rawLine of lines) {
+  for (const rawLineOrig of lines) {
+    const rawLine = preprocessWineLine(rawLineOrig);
     const line = rawLine.replace(SECTION_DECORATION_RE, '').trim();
     if (!line) continue;
+
+    // Update section-mode gate from any decorative `:: ... ::` heading.
+    const decoInner = extractDecorativeHeadingText(line);
+    if (decoInner !== null) {
+      const mode = classifyDecorativeSectionMode(decoInner);
+      if (mode === 'non-wine') {
+        sectionMode = 'non-wine';
+        lastEntry = null;
+        continue;
+      }
+      if (mode === 'wine') {
+        sectionMode = 'wine';
+        // Fall through so canonical sparkling/white/red etc. headings still
+        // populate the section name when matched below.
+      }
+    }
+
+    // Hard gate: in a non-wine section, drop every line until the next wine
+    // heading. This is the structural fix for cocktails / beer / spirits.
+    if (sectionMode === 'non-wine') {
+      lastEntry = null;
+      continue;
+    }
 
     if (looksLikeWineSectionHeader(line)) {
       const stripped = stripDecorationAndContinuation(line);
@@ -1155,6 +1376,50 @@ export function toWineEntries(parsed: ParsedWineList): WineEntry[] {
 
 export function filterFoodNoise(entries: WineEntry[]): WineEntry[] {
   const seen = new Set<string>();
+  // First pass: rescue entries where buildWineEntry's comma-split left the
+  // wine "name" as nothing more than a state/region fragment but the producer
+  // field carries the real identity. Promote the producer to the name so the
+  // wine survives the downstream short-name and geo-residue checks.
+  for (const e of entries) {
+    if (!e.producer) continue;
+    const nameTrim = (e.name ?? '').replace(/[.,;]+$/g, '').trim();
+    const looksGeoOnly =
+      /^[A-Z]{2}\.?$/.test(nameTrim) ||
+      STATE_ABBR_RE.test(nameTrim.toUpperCase().replace(/\.$/, '')) ||
+      isGeoOnlyFragment(nameTrim) ||
+      isGeoOnlyFragment(`Anything ${nameTrim}`) ||
+      (() => {
+        const residue = stripGeoTokensForResidueCheck(nameTrim);
+        const tokens = residue.split(/\s+/).filter(
+          (t) => /^[A-Za-z][A-Za-z'’\-]*$/.test(t) && t.length >= 3 && !STATE_ABBR_RE.test(t.toUpperCase())
+        );
+        return tokens.length === 0;
+      })();
+    if (!looksGeoOnly) continue;
+    const hasBottleEvidence = Boolean(
+      e.vintage || e.price || e.glassPrice || e.bottlePrice || e.binNumber
+    );
+    if (!hasBottleEvidence) continue;
+    // Don't promote a bare varietal/category-only producer into the wine
+    // name — that would yield ghost rows like just "Pinot Noir" with no
+    // identity. Drop the entry entirely later by leaving e.name short so
+    // the standard filters reject it.
+    if (
+      isVarietalOrCategoryOnlyHeading(e.producer) ||
+      CATEGORY_LIKE_WORDS_RE.test(e.producer.trim())
+    ) {
+      continue;
+    }
+    const origName = e.name;
+    if (!e.region) {
+      const det = detectRegionAndCountry(origName);
+      if (det.region) e.region = det.region;
+      if (det.country) e.country = det.country;
+    }
+    e.name = e.producer;
+    delete e.producer;
+  }
+
   return entries.filter((e) => {
     const blob = `${e.producer ?? ''} ${e.name} ${e.notes ?? ''}`;
     if (FOOD_NEGATIVE_RE.test(blob)) return false;

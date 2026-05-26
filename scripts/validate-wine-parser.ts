@@ -313,23 +313,26 @@ function main() {
       noisyWines.length > 0 && noisyWines.length <= 8
     ],
 
-    // Glued vintage+bin assertions
+    // Glued vintage+price assertions. On real wine lists (e.g. Water Grill),
+    // the trailing 2-3 digit number glued to a vintage is the bottle price,
+    // not a cellar bin. The pre-extraction normalizer un-glues the pair and
+    // the price extractor claims the trailing number.
     [
-      'GLUED: "2023179" splits to vintage 2023 + bin 179 on Acrobat row',
+      'GLUED: "2023179" splits to vintage 2023 + price 179 on Acrobat row',
       gluedWines.some(
         (w) =>
           /acrobat/i.test(`${w.producer ?? ''} ${w.name}`) &&
           w.vintage === 2023 &&
-          w.binNumber === '179'
+          (w.price === 179 || w.bottlePrice === 179)
       )
     ],
     [
-      'GLUED: "2020100" splits to vintage 2020 + bin 100 on Justin row',
+      'GLUED: "2020100" splits to vintage 2020 + price 100 on Justin row',
       gluedWines.some(
         (w) =>
           /justin/i.test(`${w.producer ?? ''} ${w.name}`) &&
           w.vintage === 2020 &&
-          w.binNumber === '100'
+          (w.price === 100 || w.bottlePrice === 100)
       )
     ],
     [
