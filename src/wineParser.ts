@@ -203,6 +203,131 @@ const PURE_DIGIT_LINE_RE = /^[\d\s.,\-#]+$/;
 const BIN_PREFIX_RE = /^(?:bin|sku|lot|cellar|item)\s*[#:]?\s*\d+\s*$/i;
 const GLUED_VINTAGE_BIN_RE = /\b(19[5-9]\d|20[0-4]\d)(\d{1,4})\b/;
 
+// Decorative section heading: anything wrapped/prefixed/suffixed by colon
+// pairs, bullets, equals, tildes, ornament punctuation (e.g. `:: SPARKLING ::`,
+// `=== RED WINE ===`, `* CHARDONNAY *`). The wrapping marks the whole line as
+// a decorative heading regardless of its inner text.
+const DECORATIVE_WRAPPED_HEADING_RE =
+  /^[\s]*(?:::|=={1,}|~{2,}|\*{2,}|-{2,}|_{2,}|•{1,}|·{1,})\s*.+?\s*(?:::|=={1,}|~{2,}|\*{2,}|-{2,}|_{2,}|•{1,}|·{1,})[\s]*$/;
+// Leading-only decorative prefix like `:: SPARKLING WINE` or `== RED WINE` with
+// no closing pair — still a heading.
+const DECORATIVE_PREFIX_HEADING_RE =
+  /^[\s]*(?:::|=={1,}|~{2,}|\*{2,}|•|·)\s*[A-Za-z][^:]{0,80}$/;
+// Trailing-only decorative suffix like `SPARKLING WINE ::` or `RED ==`.
+const DECORATIVE_SUFFIX_HEADING_RE =
+  /^[\s]*[A-Za-z][^:]{0,80}\s*(?:::|=={1,}|~{2,}|\*{2,}|•|·)[\s]*$/;
+
+// "(cont'd)" or "(continued)" continuation markers — these are always section
+// continuations, never wine entries.
+const CONTINUATION_MARKER_RE = /\(\s*(?:cont(?:'d|inued|d)?\.?|cont\.?)\s*\)/i;
+
+// All-caps section-style heading: 2+ words where most letters are uppercase,
+// no digits, short length, no commas. Catches things like `SPARKLING WINE`,
+// `CABERNET SAUVIGNON`, `PINOT GRIGIO & PINOT GRIS`, `SOUTHERN & NEW WORLD
+// RHÔNE`. We use it together with absence of bottle evidence.
+function isAllCapsSectionHeading(line: string): boolean {
+  const trimmed = line.trim().replace(/[.,;:]+$/g, '');
+  if (!trimmed) return false;
+  if (trimmed.length > 70) return false;
+  // No vintage / NV / $ / digits make this look like a heading rather than a
+  // wine row.
+  if (VINTAGE_RE.test(trimmed)) return false;
+  if (NV_RE.test(trimmed)) return false;
+  if (/\$\d/.test(trimmed)) return false;
+  if (/\d/.test(trimmed)) return false;
+  // Strip ornament chars to evaluate the inner text.
+  const inner = trimmed.replace(/[:=~*\-_•·]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!inner) return false;
+  const letters = inner.replace(/[^A-Za-zÀ-ÿ]/g, '');
+  if (letters.length < 3) return false;
+  const upperLetters = inner.replace(/[^A-ZÀ-Þ]/g, '');
+  // 90%+ of letters must be uppercase for an all-caps heading.
+  const upperRatio = upperLetters.length / Math.max(letters.length, 1);
+  if (upperRatio < 0.9) return false;
+  // No comma → looks like a section heading, not a wine row.
+  if (/,/.test(inner)) return false;
+  return true;
+}
+
+// Varietal/category-only heading: line is purely a varietal name (e.g.
+// `CABERNET SAUVIGNON`, `Chardonnay`, `Pinot Grigio & Pinot Gris`, `Syrah &
+// Shiraz`) optionally followed by `(cont'd)` and decorative wrappers — no
+// producer, no vintage, no price.
+const CATEGORY_LIKE_WORDS_RE =
+  /^(?:sparkling|champagne|ros[ée]|orange|white|red|dessert|fortified|sake|wine|wines|by the (?:glass|bottle))(?:\s+(?:wine|wines))?$/i;
+
+function stripDecorationAndContinuation(line: string): string {
+  let s = line.trim();
+  // Strip decorative wrappers from start/end.
+  s = s.replace(/^[\s:=~*_\-•·]+/, '').replace(/[\s:=~*_\-•·]+$/, '').trim();
+  // Strip continuation markers.
+  s = s.replace(CONTINUATION_MARKER_RE, '').replace(/\s{2,}/g, ' ').trim();
+  // Strip dangling punctuation.
+  s = s.replace(/[.,;:]+$/g, '').trim();
+  return s;
+}
+
+function isVarietalOrCategoryOnlyHeading(line: string): boolean {
+  const stripped = stripDecorationAndContinuation(line);
+  if (!stripped) return false;
+  if (VINTAGE_RE.test(stripped)) return false;
+  if (NV_RE.test(stripped)) return false;
+  if (/\$\d/.test(stripped)) return false;
+  if (/\d/.test(stripped)) return false;
+  if (/,/.test(stripped)) return false;
+  if (CATEGORY_LIKE_WORDS_RE.test(stripped)) return true;
+  // Split on `&`/`/`/`+`/`and` — every part must match a known varietal.
+  const parts = stripped
+    .split(/\s*(?:&|\/|\+|\band\b)\s*/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return false;
+  const allVarietal = parts.every((p) => {
+    // p must match a varietal pattern AND nothing else (no extra producer
+    // words). To check that, after detecting the varietal, the remainder must
+    // be empty or only ornament chars.
+    for (const re of VARIETALS) {
+      const m = p.match(re);
+      if (m && p.replace(re, '').replace(/[\s:=~*_\-•·]+/g, '').trim() === '') {
+        return true;
+      }
+    }
+    // Also accept the bare category words on their own
+    if (CATEGORY_LIKE_WORDS_RE.test(p)) return true;
+    return false;
+  });
+  return allVarietal;
+}
+
+function isDecorativeSectionHeading(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (DECORATIVE_WRAPPED_HEADING_RE.test(trimmed)) return true;
+  // Prefix or suffix-only ornament with no vintage/price (so it's not a real
+  // wine row with stray punctuation).
+  const stripped = stripDecorationAndContinuation(trimmed);
+  if (DECORATIVE_PREFIX_HEADING_RE.test(trimmed) || DECORATIVE_SUFFIX_HEADING_RE.test(trimmed)) {
+    if (!VINTAGE_RE.test(trimmed) && !NV_RE.test(trimmed) && !/\$\d/.test(trimmed)) {
+      // If after stripping the ornament the residue is empty, a category,
+      // a varietal, or an all-caps section name → heading.
+      if (!stripped) return true;
+      if (isVarietalOrCategoryOnlyHeading(stripped)) return true;
+      if (isAllCapsSectionHeading(stripped)) return true;
+    }
+  }
+  return false;
+}
+
+// Quote-prefixed vineyard/appellation fragment without bottle evidence — e.g.
+// `'Blanchots' Grand Cru`, `'Les Clos' Grand Cru`, `'Russian River Valley, CA`,
+// `'Charles Heintz Vineyard', Coast, CA`. Always wraps with a leading quote
+// (straight or curly) followed by a capitalized name.
+const QUOTE_PREFIX_RE = /^[\s]*[‘'`"]\s*[A-ZÀ-Þ]/;
+
+function isQuotePrefixedFragmentLine(line: string): boolean {
+  return QUOTE_PREFIX_RE.test(line);
+}
+
 const FOOD_NEGATIVE_RE =
   /\b(salad|sandwich|burger|pizza|pasta|risotto|steak|ribeye|filet|oyster|clam|mussel|shrimp|crab|lobster|tartare|crudo|sashimi|nigiri|caviar|truffle butter|fries|side|dessert|cake|pie|cookie|sorbet|ice cream|sopapilla|enchilada|burrito|taco|fajita|quesadilla|tamale)\b/i;
 
@@ -392,19 +517,23 @@ function classifySection(name: string): { category: string; canonical: string } 
 }
 
 function looksLikeWineSectionHeader(line: string): boolean {
-  if (line.length > 60) return false;
+  if (line.length > 80) return false;
   if (FOOD_SECTION_NAMES_RE.test(line)) return false;
   if (VINTAGE_RE.test(line)) return false;
   if (NV_RE.test(line)) return false;
-  if (/,/.test(line)) return false;
   if (/\$\d/.test(line)) return false;
-  const tokens = line.trim().split(/\s+/);
-  if (tokens.length > 5) return false;
-  const trailing = extractTrailingPrices(line);
+  // Strip decorative wrappers/continuations before classifying so that
+  // `:: SPARKLING WINE ::` and `:: CHARDONNAY (cont'd) ::` are recognized.
+  const stripped = stripDecorationAndContinuation(line);
+  if (!stripped) return false;
+  if (/,/.test(stripped)) return false;
+  const tokens = stripped.trim().split(/\s+/);
+  if (tokens.length > 6) return false;
+  const trailing = extractTrailingPrices(stripped);
   if (trailing.prices.length > 0) return false;
-  const lettersOnly = line.replace(/[^A-Za-z]/g, '');
+  const lettersOnly = stripped.replace(/[^A-Za-z]/g, '');
   if (lettersOnly.length < 3) return false;
-  return classifySection(line) !== null;
+  return classifySection(stripped) !== null;
 }
 
 function detectVintage(text: string): { vintage: number | null; cleaned: string } {
@@ -656,6 +785,38 @@ function looksLikeWineEntry(line: string): boolean {
   if (/^\(/.test(line)) return false;
   if (isLikelyBinOrNoiseLine(line)) return false;
   if (isGeoOnlyFragment(line)) return false;
+
+  // Decorative section headings — `:: SPARKLING WINE ::`, `== RED ==`,
+  // `:: CABERNET SAUVIGNON (cont'd) ::` — never wine rows.
+  if (isDecorativeSectionHeading(line)) return false;
+  // Continuation markers like `(cont'd)` always indicate a section heading,
+  // never a wine row, when there's no bottle evidence on the same line.
+  if (
+    CONTINUATION_MARKER_RE.test(line) &&
+    !VINTAGE_RE.test(line) &&
+    !NV_RE.test(line) &&
+    !/\$\d/.test(line)
+  ) {
+    return false;
+  }
+  // Varietal- or category-only heading (e.g. `CABERNET SAUVIGNON`,
+  // `Chardonnay`, `Pinot Grigio & Pinot Gris`, `RED WINE`).
+  if (isVarietalOrCategoryOnlyHeading(line)) return false;
+  // All-caps section heading without bottle evidence (e.g. `SOUTHERN & NEW
+  // WORLD RHÔNE`, `NEW WORLD 'BORDEAUX'`).
+  if (isAllCapsSectionHeading(line)) return false;
+  // Quote-prefixed vineyard/appellation fragment without any vintage/price/
+  // varietal evidence (e.g. `'Blanchots' Grand Cru`, `'Russian River Valley,
+  // CA`). Real producer rows that happen to use a quoted cuvée name will have
+  // a vintage or price on the same line and are preserved.
+  if (isQuotePrefixedFragmentLine(line)) {
+    const hasVintageHere = VINTAGE_RE.test(line) || NV_RE.test(line);
+    const { prices: pricesHere } = extractTrailingPrices(line);
+    const hasPriceHere = pricesHere.length > 0;
+    const hasVarietalHere = detectVarietal(line) !== undefined;
+    if (!hasVintageHere && !hasPriceHere && !hasVarietalHere) return false;
+  }
+
   const hasUpper = /[A-Z]/.test(line);
   if (!hasUpper) return false;
 
@@ -888,9 +1049,35 @@ export function parseWineText(text: string, sourceFile: string): ParsedWineList 
     if (!line) continue;
 
     if (looksLikeWineSectionHeader(line)) {
-      const cls = classifySection(line)!;
+      const stripped = stripDecorationAndContinuation(line);
+      const cls = classifySection(stripped)!;
       flush();
       current = { section: cls.canonical, category: cls.category, items: [] };
+      lastEntry = null;
+      continue;
+    }
+
+    // Decorative/varietal/category-only headings that aren't a known canonical
+    // section (e.g. `:: CABERNET SAUVIGNON ::`, `:: MALBEC (cont'd) ::`,
+    // `SOUTHERN & NEW WORLD RHÔNE`). Drop them and reset the trailing-entry
+    // pointer so they don't bleed into the previous wine's notes.
+    if (
+      isDecorativeSectionHeading(line) ||
+      isVarietalOrCategoryOnlyHeading(line) ||
+      isAllCapsSectionHeading(line)
+    ) {
+      lastEntry = null;
+      continue;
+    }
+
+    // Lone continuation marker without bottle evidence — section continuation,
+    // not a wine row.
+    if (
+      CONTINUATION_MARKER_RE.test(line) &&
+      !VINTAGE_RE.test(line) &&
+      !NV_RE.test(line) &&
+      !/\$\d/.test(line)
+    ) {
       lastEntry = null;
       continue;
     }
@@ -976,6 +1163,33 @@ export function filterFoodNoise(entries: WineEntry[]): WineEntry[] {
     if (/^\d+$/.test(e.name.replace(/\s+/g, ''))) return false;
     const letters = e.name.replace(/[^A-Za-z]/g, '');
     if (letters.length < 3) return false;
+    // Strict final filter — reject anything that still looks like a
+    // decorative section heading, a varietal/category-only label, or a
+    // continuation marker. We test both the bare name and the producer+name
+    // combination so neither field can smuggle a heading through.
+    const identityRaw = `${e.producer ?? ''} ${e.name}`.trim();
+    const hasBottleEvidenceStrict = Boolean(
+      e.vintage || e.price || e.glassPrice || e.bottlePrice || e.binNumber ||
+      (e.producer && e.varietal)
+    );
+    if (isDecorativeSectionHeading(e.name) || isDecorativeSectionHeading(identityRaw)) return false;
+    if (
+      CONTINUATION_MARKER_RE.test(e.name) ||
+      CONTINUATION_MARKER_RE.test(identityRaw)
+    ) {
+      if (!hasBottleEvidenceStrict) return false;
+    }
+    if (isVarietalOrCategoryOnlyHeading(e.name) || isVarietalOrCategoryOnlyHeading(identityRaw)) {
+      if (!hasBottleEvidenceStrict) return false;
+    }
+    if (isAllCapsSectionHeading(e.name) || isAllCapsSectionHeading(identityRaw)) {
+      if (!hasBottleEvidenceStrict) return false;
+    }
+    if (isQuotePrefixedFragmentLine(e.name) || isQuotePrefixedFragmentLine(identityRaw)) {
+      if (!hasBottleEvidenceStrict) return false;
+    }
+    // Any residual ornament `::` in the name → reject.
+    if (/::/.test(e.name) || /::/.test(e.producer ?? '')) return false;
     // Drop entries whose entire identity is a geo-only fragment (e.g. "Coast, CA").
     const identity = `${e.producer ?? ''}, ${e.name}`.replace(/^,\s*/, '');
     if (isGeoOnlyFragment(identity)) return false;

@@ -135,6 +135,53 @@ Inglenook, Cabernet Sauvignon, Rutherford, CA 2018 245
 Giacomo Conterno, Monfortino Riserva, Barolo, Italy 2014 1500
 `;
 
+// Mirrors the production screenshot from /parse-wine-list: many decorative
+// `:: ... ::` section headings, varietal-only category labels, `(cont'd)`
+// continuations, and quote-prefixed vineyard/appellation fragments.
+const DECORATIVE_HEADING_NOISE = `
+WINE LIST
+
+:: SPARKLING WINE ::
+Veuve Clicquot Yellow Label, Brut, Champagne, France NV 145
+
+:: NEW WORLD 'BORDEAUX' ::
+:: CABERNET SAUVIGNON ::
+Caymus, Cabernet Sauvignon, Napa Valley, USA 2020 165
+:: CABERNET SAUVIGNON (cont'd) ::
+Silver Oak, Cabernet Sauvignon, Alexander Valley, CA 2019 195
+
+:: CHARDONNAY ::
+Far Niente, Chardonnay, Napa Valley, CA 2022 185
+'Blanchots' Grand Cru
+'Les Clos' Grand Cru
+'Charles Heintz Vineyard', Coast, CA
+'Russian River Valley, CA
+:: CHARDONNAY (cont'd) ::
+Kistler, Chardonnay, Sonoma Coast, CA 2021 195
+
+:: MALBEC ::
+Bodega Catena Zapata, Malbec, Mendoza, Argentina 2021 110
+
+:: MERLOT ::
+Duckhorn, Merlot, Napa Valley, CA 2020 145
+
+:: PINOT GRIGIO & PINOT GRIS ::
+Santa Margherita, Pinot Grigio, Alto Adige, Italy 2022 75
+
+:: PINOT NOIR ::
+Sea Smoke, Pinot Noir, Sta. Rita Hills, USA 2021 245
+
+:: RIESLING ::
+Dr. Loosen, Riesling, Mosel, Germany 2021 65
+
+:: SAUVIGNON BLANC ::
+Cloudy Bay, Sauvignon Blanc, Marlborough, New Zealand 2022 18 85
+
+:: SOUTHERN & NEW WORLD RHÔNE ::
+:: SYRAH & SHIRAZ ::
+Penfolds, Grange Shiraz, Barossa, Australia 2017 850
+`;
+
 function runSample(label: string, source: string) {
   const parsed = parseWineText(source, `${label}.txt`);
   const wines = filterFoodNoise(toWineEntries(parsed));
@@ -168,6 +215,10 @@ function main() {
   const { parsed: headingParsed, wines: headingWines } = runSample(
     'APPELLATION_HEADING_NOISE',
     APPELLATION_HEADING_NOISE
+  );
+  const { parsed: decoParsed, wines: decoWines } = runSample(
+    'DECORATIVE_HEADING_NOISE',
+    DECORATIVE_HEADING_NOISE
   );
 
   console.log('\n=== Sample entries (first 3) ===');
@@ -593,6 +644,201 @@ function main() {
     [
       'HEADING: total wines in heading-noise sample is ~10 (only real wines kept)',
       headingWines.length >= 8 && headingWines.length <= 12
+    ],
+
+    // Decorative `:: ... ::` section headings + varietal-only labels +
+    // (cont'd) + quote-prefixed fragments — exact false positives from the
+    // production screenshot.
+    [
+      "DECO: ':: NEW WORLD \\'BORDEAUX\\' ::' rejected",
+      !decoWines.some((w) => /new world/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      "DECO: ':: SPARKLING WINE ::' rejected",
+      !decoWines.some((w) => /^sparkling wine$/i.test(`${w.producer ?? ''} ${w.name}`.trim()))
+    ],
+    [
+      "DECO: ':: CABERNET SAUVIGNON ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^cabernet sauvignon$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: CABERNET SAUVIGNON (cont'd) ::' rejected",
+      !decoWines.some((w) => /cont/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      "DECO: ':: CHARDONNAY ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^chardonnay$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: CHARDONNAY (cont'd) ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /chardonnay/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          /cont/i.test(`${w.producer ?? ''} ${w.name}`)
+      )
+    ],
+    [
+      "DECO: ':: MALBEC ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^malbec$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: MERLOT ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^merlot$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: PINOT GRIGIO & PINOT GRIS ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^pinot grigio\s*&\s*pinot gris$/i.test(
+            `${w.producer ?? ''} ${w.name}`.trim()
+          )
+      )
+    ],
+    [
+      "DECO: ':: PINOT NOIR ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^pinot noir$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: RIESLING ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^riesling$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: SAUVIGNON BLANC ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^sauvignon blanc$/i.test(`${w.producer ?? ''} ${w.name}`.trim()) &&
+          !w.vintage
+      )
+    ],
+    [
+      "DECO: ':: SOUTHERN & NEW WORLD RHÔNE ::' rejected",
+      !decoWines.some((w) => /southern.*rh/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      "DECO: ':: SYRAH & SHIRAZ ::' rejected",
+      !decoWines.some(
+        (w) =>
+          /^syrah\s*&\s*shiraz$/i.test(`${w.producer ?? ''} ${w.name}`.trim())
+      )
+    ],
+    [
+      "DECO: \"'Blanchots' Grand Cru\" rejected (quote-prefixed fragment)",
+      !decoWines.some((w) => /blanchots/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      "DECO: \"'Les Clos' Grand Cru\" rejected (quote-prefixed fragment)",
+      !decoWines.some((w) => /les clos/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      "DECO: \"'Charles Heintz Vineyard', Coast, CA\" rejected",
+      !decoWines.some((w) => /charles heintz/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      "DECO: \"'Russian River Valley, CA\" rejected (quote-prefixed geo fragment)",
+      !decoWines.some(
+        (w) =>
+          /russian river/i.test(`${w.producer ?? ''} ${w.name}`) &&
+          !w.varietal &&
+          !w.vintage &&
+          !w.price
+      )
+    ],
+    [
+      'DECO: no entry contains "::" ornament in name or producer',
+      decoWines.every(
+        (w) => !/::/.test(w.name) && !/::/.test(w.producer ?? '')
+      )
+    ],
+    [
+      'DECO: no entry has "(cont\'d)" residue in name or producer',
+      decoWines.every(
+        (w) =>
+          !/cont/i.test(w.name) &&
+          !/cont/i.test(w.producer ?? '')
+      )
+    ],
+    // Preservation — real wines under each decorative heading must survive.
+    [
+      'DECO PRESERVE: Veuve Clicquot preserved',
+      decoWines.some((w) => /veuve clicquot/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Caymus / Cabernet Sauvignon preserved',
+      decoWines.some(
+        (w) =>
+          /caymus/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2020
+      )
+    ],
+    [
+      'DECO PRESERVE: Silver Oak (after cont\'d) preserved',
+      decoWines.some(
+        (w) =>
+          /silver oak/i.test(`${w.producer ?? ''} ${w.name}`) && w.vintage === 2019
+      )
+    ],
+    [
+      'DECO PRESERVE: Far Niente / Chardonnay preserved',
+      decoWines.some((w) => /far niente/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Kistler / Chardonnay preserved',
+      decoWines.some((w) => /kistler/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Catena Zapata / Malbec preserved',
+      decoWines.some((w) => /catena/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Duckhorn / Merlot preserved',
+      decoWines.some((w) => /duckhorn/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Santa Margherita / Pinot Grigio preserved',
+      decoWines.some((w) => /santa margherita/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Sea Smoke / Pinot Noir preserved',
+      decoWines.some((w) => /sea smoke/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Dr. Loosen / Riesling preserved',
+      decoWines.some((w) => /loosen/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Cloudy Bay / Sauvignon Blanc preserved',
+      decoWines.some((w) => /cloudy bay/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO PRESERVE: Penfolds / Grange Shiraz preserved',
+      decoWines.some((w) => /penfolds/i.test(`${w.producer ?? ''} ${w.name}`))
+    ],
+    [
+      'DECO: total wines from decorative-heading sample is exactly 12 (one per real wine)',
+      decoWines.length === 12
     ]
   ];
 
