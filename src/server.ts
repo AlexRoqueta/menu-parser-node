@@ -8,6 +8,13 @@ import {
   parseMenuText,
   toTableSommDishes
 } from './menuParser.js';
+import {
+  parseWineText,
+  toWineEntries,
+  filterFoodNoise
+} from './wineParser.js';
+
+const WINE_PARSER_VERSION = '1.0.0';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,7 +29,11 @@ app.get('/', (_req, res) => {
   res.json({
     ok: true,
     service: 'tablesomm-menu-parser-api',
-    endpoints: ['GET /health', 'POST /parse-menu (multipart, field=file)'],
+    endpoints: [
+      'GET /health',
+      'POST /parse-menu (multipart, field=file)',
+      'POST /parse-wine-list (multipart, field=file)'
+    ],
     acceptedFileTypes: ['application/pdf', 'image/*']
   });
 });
@@ -68,6 +79,47 @@ app.post('/parse-menu', upload.single('file'), async (req, res) => {
       parsed: filteredParsed,
       dishes,
       count: dishes.length,
+      acceptedInputType: isPdf ? 'pdf' : 'image'
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown parse error';
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.post('/parse-wine-list', upload.single('file'), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res
+        .status(400)
+        .json({ error: 'Missing file upload. Use form field name "file".' });
+    }
+
+    const isPdf =
+      /\.pdf$/i.test(file.originalname) || file.mimetype === 'application/pdf';
+    const isImage =
+      (file.mimetype?.startsWith('image/') ?? false) ||
+      /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(file.originalname);
+
+    if (!isPdf && !isImage) {
+      return res.status(400).json({ error: 'Only PDF and image files are supported.' });
+    }
+
+    const text = await extractTextFromUpload(
+      file.buffer,
+      file.originalname,
+      file.mimetype
+    );
+    const parsed = parseWineText(text, file.originalname);
+    const allWines = toWineEntries(parsed);
+    const wines = filterFoodNoise(allWines);
+
+    return res.json({
+      parsed,
+      wines,
+      count: wines.length,
+      parserVersion: WINE_PARSER_VERSION,
       acceptedInputType: isPdf ? 'pdf' : 'image'
     });
   } catch (error) {
